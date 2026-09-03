@@ -1,5 +1,9 @@
 'use client'
 
+// Semi 已从产品页移除，仅本 spike 页保留：自行引入 React19 适配器与 Semi 全量样式
+// （semi 包 exports 未暴露 css 子路径，参照旧 globals.css 以相对路径引入）
+import '@douyinfe/semi-ui/react19-adapter'
+import '../../../node_modules/@douyinfe/semi-ui/dist/css/semi.min.css'
 import { useCallback, useState, type ReactNode } from 'react'
 import { Avatar, Chat, Typography } from '@douyinfe/semi-ui'
 import type { ChatBoxRenderConfig, Message } from '@douyinfe/semi-ui/lib/es/chat/interface'

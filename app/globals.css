@@ -1,234 +1,135 @@
-/* Semi 全量样式：包 exports 未暴露 dist/css 子路径，走相对路径引入 */
-@import '../node_modules/@douyinfe/semi-ui/dist/css/semi.min.css';
-
 /*
- * Discord 设计语言映射（来源：DESIGN.md）
- * 品牌色：blurple #5865f2 / green #35ed7e / magenta #ec48bd / link #00b0f4
- * 画布：indigo #0a0d3a / raised indigo #1e2353 / onyx #23272a
- * 几何：控件 12-16px 圆角、媒体/面板 24-40px、徽章全圆（rounded.{sm,lg,xl,pill}）
- * 间距：8px 基数（spacing.{xs=8, sm=12, md=16, lg=20, xl=24, xxl=32, section=40}）
- * 字体：ABC Ginto Nord / gg sans 为私有字体，按 DESIGN.md 建议以 Hanken Grotesk（展示）+
- *       Inter（正文/UI）替代，标题保持 700-800 重量的「大声」气质。
+ * net-wave 全局样式：Tailwind v4 + shadcn/ui 语义令牌。
+ *
+ * 视觉基准（Discord 截图 + DESIGN.md）：
+ * - App 外壳采用 Discord 经典 onyx 灰阶（rail #1e1f22 / 侧栏 #2b2d31 / 聊天区 #313338 / 输入 #383a40），
+ *   区块之间以色阶分界，扁平无阴影（用户要求「扁平式设计」）。
+ * - 品牌 accent 来自 DESIGN.md：blurple #5865f2（主操作）、绿 #23a55a（在线状态）、
+ *   green #35ed7e（DESIGN.md 高意向 CTA，保留）、magenta #ec48bd（房间/徽章）、link #00a8fc。
+ * - 圆角刻度（DESIGN.md rounded.*）：控件 8px、卡片/弹窗 12-16px、聊天气泡输入条 24px、头像/徽章全圆。
+ * - 字体：ABC Ginto Nord / gg sans 为私有字体，按系统字体栈替代（中文回落 PingFang/雅黑）。
+ * 应用为纯深色单主题（theme lock），不设浅色分支。
  */
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+@custom-variant dark (&:is(.dark *));
+
 :root {
-  --nw-primary: #5865f2;
-  --nw-primary-hover: #4752c4;
-  --nw-primary-active: #3c45a5;
+  /* shadcn 语义令牌（Discord onyx 映射） */
+  --background: #313338;
+  --foreground: #f2f3f5;
+  --card: #2b2d31;
+  --card-foreground: #f2f3f5;
+  --popover: #2b2d31;
+  --popover-foreground: #f2f3f5;
+  --primary: #5865f2;
+  --primary-foreground: #ffffff;
+  --secondary: #383a40;
+  --secondary-foreground: #dbdee1;
+  --muted: #383a40;
+  --muted-foreground: #949ba4;
+  --accent: #404249;
+  --accent-foreground: #f2f3f5;
+  --destructive: #f23f43;
+  --border: rgba(255, 255, 255, 0.06);
+  --input: #1e1f22;
+  --ring: #5865f2;
+
+  /* net-wave 专属：App 外壳分区与品牌 accent */
+  --rail: #1e1f22;
+  --sidebar: #2b2d31;
+  --chat: #313338;
+  --online: #23a55a;
+  --idle: #f0b232;
   --nw-green: #35ed7e;
-  --nw-green-hover: #2bc76a;
   --nw-magenta: #ec48bd;
-  --nw-link: #00b0f4;
-  --nw-canvas: #0a0d3a;
-  --nw-indigo: #1e2353;
-  --nw-onyx: #23272a;
-  --nw-ink: #ffffff;
-  --nw-ink-dark: #000000;
-  --nw-hairline: rgba(255, 255, 255, 0.08);
-  --nw-shadow-float: 0 3px 24px rgba(69, 42, 124, 0.35);
+  --nw-link: #00a8fc;
+
+  --radius: 0.5rem;
 }
 
-html,
-html body {
-  margin: 0;
-  padding: 0;
+@theme inline {
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB',
+    'Microsoft YaHei', sans-serif;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-rail: var(--rail);
+  --color-sidebar: var(--sidebar);
+  --color-chat: var(--chat);
+  --color-online: var(--online);
+  --color-idle: var(--idle);
+  --color-nw-green: var(--nw-green);
+  --color-nw-magenta: var(--nw-magenta);
+  --color-nw-link: var(--nw-link);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
 }
 
-/* —— 浅色模式保底：仅换主色与圆角，保证未声明 dark 属性时界面依然成立 —— */
-html body {
-  font-family: 'Inter', 'Hanken Grotesk', -apple-system, BlinkMacSystemFont, 'PingFang SC',
-    'Hiragino Sans GB', 'Microsoft YaHei', 'Segoe UI', sans-serif;
-  --semi-color-primary: #5865f2;
-  --semi-color-primary-hover: #4752c4;
-  --semi-color-primary-active: #3c45a5;
-  --semi-border-radius-small: 6px;   /* DESIGN.md rounded.xs */
-  --semi-border-radius-medium: 12px; /* rounded.sm */
-  --semi-border-radius-large: 16px;  /* rounded.lg */
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  html,
+  body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+  }
+
+  body {
+    @apply bg-chat text-foreground font-sans antialiased;
+  }
+
+  /* Discord 风格细滚动条：低存在感 */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.16) transparent;
+  }
+
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.16);
+    border-radius: 9999px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::selection {
+    background: rgba(88, 101, 242, 0.6);
+    color: #ffffff;
+  }
 }
 
-/* —— Discord 原味深色：body[theme-mode=dark]（layout.tsx 挂在 body 上） —— */
-html body[theme-mode='dark'] {
-  /* 画布与层级：canvas → raised indigo → onyx */
-  --semi-color-bg-0: #0a0d3a;
-  --semi-color-bg-1: #1e2353;
-  --semi-color-bg-2: #23272a;
-  --semi-color-bg-3: #2a2f56;
-  --semi-color-bg-4: #313661;
-  --semi-color-fill-0: rgba(255, 255, 255, 0.08);
-  --semi-color-fill-1: rgba(255, 255, 255, 0.12);
-  --semi-color-fill-2: rgba(255, 255, 255, 0.16);
-  --semi-color-border: rgba(255, 255, 255, 0.1);
-  --semi-color-text-0: #ffffff;
-  --semi-color-text-1: rgba(255, 255, 255, 0.86);
-  --semi-color-text-2: rgba(255, 255, 255, 0.66);
-  --semi-color-text-3: rgba(255, 255, 255, 0.45);
-  --semi-color-primary: #5865f2;
-  --semi-color-primary-hover: #4752c4;
-  --semi-color-primary-active: #3c45a5;
-  --semi-color-danger: #f23f43;
-  --semi-color-warning: #faa61a;
-  --semi-color-success: #35ed7e;
-  --semi-color-link: #00b0f4;
-  --semi-color-focus-shadow: 0 0 0 2px rgba(88, 101, 242, 0.6);
-}
-
-/* 品牌渐变画布：blurple → 深紫 → magenta 柔光斑，铺在 body 上，
-   半透明面板（顶栏/空态卡）透出它，避免大面积死黑（DESIGN.md「Don't flatten」） */
-html body[theme-mode='dark'] {
-  background-color: var(--nw-canvas);
-  background-image: radial-gradient(52rem 32rem at 85% -10%, rgba(236, 72, 189, 0.16), transparent 60%),
-    radial-gradient(48rem 30rem at -10% 30%, rgba(88, 101, 242, 0.28), transparent 60%),
-    radial-gradient(40rem 26rem at 60% 110%, rgba(88, 101, 242, 0.18), transparent 65%);
-  background-attachment: fixed;
-  color: var(--nw-ink);
-}
-
-/* 应用主容器默认透明，让画布透出 */
-#__next,
-#root {
-  background: transparent;
-}
-
-/* —— 字体层级（DESIGN.md typography， substituted 字体） —— */
-body,
-button,
-input {
-  font-family: 'Inter', 'Hanken Grotesk', -apple-system, BlinkMacSystemFont, 'PingFang SC',
-    'Hiragino Sans GB', 'Microsoft YaHei', 'Segoe UI', sans-serif;
-}
-
-.nw-display {
-  font-family: 'Hanken Grotesk', 'Inter', -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif;
-  font-weight: 800;
-  letter-spacing: 0.02em;
-}
-
-/* —— 顶栏（DESIGN.md nav-bar：canvas 面 + 白字） —— */
-.nw-header {
-  background: rgba(10, 13, 58, 0.72);
-  backdrop-filter: blur(12px);
-  border-bottom: 1px solid var(--nw-hairline);
-  color: var(--nw-ink);
-}
-
-/* 聊天区顶栏：贴聊天面板，用 onyx 一档区分 */
-.nw-header--chat {
-  background: rgba(35, 39, 42, 0.6);
-}
-
-.nw-header-title {
-  font-family: 'Hanken Grotesk', 'Inter', -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif;
-  font-weight: 800;
-  font-size: 18px;
-  letter-spacing: 0.01em;
-  color: var(--nw-ink);
-}
-
-/* —— 侧栏（DESIGN.md ex-app-shell-row：active 用品牌色指示） —— */
-.nw-aside {
-  background: rgba(30, 35, 83, 0.55);
-  backdrop-filter: blur(8px);
-}
-
-.nw-aside + main,
-.nw-aside ~ main {
-  border-left: none;
-}
-
-.nw-row {
-  border-radius: 14px; /* DESIGN.md rounded.md */
-  padding: 10px 12px;  /* spacing.sm spacing.md */
-  transition: background-color 0.2s ease;
-  cursor: pointer;
-}
-
-.nw-row:hover {
-  background: rgba(255, 255, 255, 0.06);
-}
-
-.nw-row--active {
-  background: rgba(88, 101, 242, 0.22);
-}
-
-/* —— 聊天区（Chat 组件容器走 Semi 变量，这里补氛围） —— */
-.semi-ai-chat-dialogue {
-  background: transparent;
-}
-
-/* —— 空态卡（DESIGN.md ex-empty-state-card：canvas 面 + rounded.lg） —— */
-.nw-empty-card {
-  background: rgba(10, 13, 58, 0.72);
-  border: 1px solid var(--nw-hairline);
-  border-radius: 16px;
-  padding: 40px 32px; /* spacing.section spacing.xxl */
-  box-shadow: var(--nw-shadow-float);
-}
-
-/* —— 验证码复制小按钮（chip 化，pill 圆角 + green 点缀） —— */
-.nw-code-chip {
-  margin-left: 8px;
-  vertical-align: middle;
-  color: var(--nw-green);
-  background: transparent;
-  border: 1px solid rgba(53, 237, 126, 0.4);
-  border-radius: 9999px;
-  padding: 2px 12px;
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background-color 0.2s ease;
-}
-
-.nw-code-chip:hover {
-  background: rgba(53, 237, 126, 0.1);
-}
-
-/* —— Toast（DESIGN.md ex-toast：canvas 面 + rounded.lg + 中投影） —— */
-.semi-toast .semi-toast-content {
-  background-color: var(--nw-canvas);
-  border: 1px solid var(--nw-hairline);
-  border-radius: 16px;
-  color: var(--nw-ink);
-}
-
-/* —— Modal 圆角随 rounded.lg —— */
-.semi-modal-content {
-  border-radius: 16px;
-}
-
-/* —— 滚动条与选区：细、白、低存在感（含根滚动条，避免浅色条露馅） —— */
-html[theme-mode='dark'],
-body[theme-mode='dark'] ::-webkit-scrollbar {
-  scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.16) transparent;
-  width: 8px;
-  height: 8px;
-}
-
-body[theme-mode='dark'] ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.16);
-  border-radius: 9999px;
-}
-
-body[theme-mode='dark'] ::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-body[theme-mode='dark'] ::selection {
-  background: rgba(88, 101, 242, 0.6);
-  color: #ffffff;
-}
-
-/* —— 键盘可达性：所有可交互元素可见焦点环（UX CRITICAL） —— */
-body[theme-mode='dark'] a:focus-visible,
-body[theme-mode='dark'] button:focus-visible,
-body[theme-mode='dark'] [role='button']:focus-visible,
-body[theme-mode='dark'] input:focus-visible,
-body[theme-mode='dark'] textarea:focus-visible {
-  outline: 2px solid #ffffff;
-  outline-offset: 2px;
-}
-
-/* —— 动效尊重系统设置（UX CRITICAL） —— */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
