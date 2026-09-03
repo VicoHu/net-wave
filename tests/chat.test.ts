@@ -1,7 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import WebSocket from 'ws'
 import { startApp, type AppHandle } from './helpers/startApp'
-import { watchMessages, type WsWaiter } from './helpers/wsEvents'
+import { connectWs, createPeer, sendWs, setupDirectConversation } from './helpers/clients'
 
 let app: AppHandle
 
@@ -14,45 +13,6 @@ interface ChatMessageRow {
   createdAt: number
 }
 
-async function createPeer(): Promise<string> {
-  const res = await fetch(`${app.baseUrl}/api/me`)
-  return ((res.headers.get('set-cookie') ?? '').match(/nw_peer=([^;]+)/) ?? [])[1]
-}
-
-function connectWs(peerId: string): Promise<{ ws: WebSocket; wait: WsWaiter }> {
-  return new Promise((resolve, reject) => {
-    const ws = new WebSocket(app.wsUrl, { headers: { Cookie: `nw_peer=${peerId}` } })
-    ws.once('open', () => resolve({ ws, wait: watchMessages(ws) }))
-    ws.once('error', reject)
-  })
-}
-
-function sendWs(ws: WebSocket, payload: unknown) {
-  ws.send(JSON.stringify(payload))
-}
-
-/** 建立两人私聊所需的全部前置：身份 + WS + 会话 */
-async function setupDirectConversation() {
-  const peerA = await createPeer()
-  const peerB = await createPeer()
-  const a = await connectWs(peerA)
-  await a.wait('presence')
-  const b = await connectWs(peerB)
-  // 用"包含双方"而非绝对数量断言：不依赖其他测试遗留连接的清理时序
-  const hasBoth = (d: { peers: { id: string }[] }) =>
-    d.peers.some((p) => p.id === peerA) && d.peers.some((p) => p.id === peerB)
-  await Promise.all([a.wait('presence', hasBoth), b.wait('presence', hasBoth)])
-
-  const convRes = await fetch(`${app.baseUrl}/api/conversations`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Cookie: `nw_peer=${peerA}` },
-    body: JSON.stringify({ peerId: peerB }),
-  })
-  expect(convRes.status).toBe(200)
-  const conversation = (await convRes.json()) as { id: number }
-  return { peerA, peerB, a, b, conversationId: conversation.id }
-}
-
 beforeAll(async () => {
   app = await startApp()
 })
@@ -63,7 +23,7 @@ afterAll(async () => {
 
 describe('点对点文本私聊', () => {
   it('发送文本：双方实时收到 message 事件', async () => {
-    const { peerA, a, b, conversationId } = await setupDirectConversation()
+    const { peerA, a, b, conversationId } = await setupDirectConversation(app)
 
     const aPromise = a.wait('message')
     const bPromise = b.wait('message')
@@ -79,7 +39,7 @@ describe('点对点文本私聊', () => {
   })
 
   it('历史拉取：GET messages 返回已发送消息', async () => {
-    const { peerB, a, conversationId } = await setupDirectConversation()
+    const { peerB, a, conversationId } = await setupDirectConversation(app)
     sendWs(a.ws, { type: 'send-message', conversationId, text: '历史消息测试' })
     await a.wait('message')
     a.ws.close()
@@ -93,8 +53,8 @@ describe('点对点文本私聊', () => {
   })
 
   it('非会话方的拉取被拒绝', async () => {
-    const outsider = await createPeer()
-    const { conversationId } = await setupDirectConversation()
+    const outsider = await createPeer(app.baseUrl)
+    const { conversationId } = await setupDirectConversation(app)
     const res = await fetch(`${app.baseUrl}/api/conversations/${conversationId}/messages`, {
       headers: { Cookie: `nw_peer=${outsider}` },
     })
@@ -102,7 +62,7 @@ describe('点对点文本私聊', () => {
   })
 
   it('会话列表：包含对方信息与最后一条消息', async () => {
-    const { peerA, peerB, a, conversationId } = await setupDirectConversation()
+    const { peerA, peerB, a, conversationId } = await setupDirectConversation(app)
     sendWs(a.ws, { type: 'send-message', conversationId, text: '最后一条预览' })
     await a.wait('message')
     a.ws.close()
@@ -117,7 +77,7 @@ describe('点对点文本私聊', () => {
   })
 
   it('持久化：服务中心重启后历史完整', async () => {
-    const { peerA, peerB, a, conversationId } = await setupDirectConversation()
+    const { peerA, peerB, a, conversationId } = await setupDirectConversation(app)
     sendWs(a.ws, { type: 'send-message', conversationId, text: '重启前的消息' })
     await a.wait('message')
     a.ws.close()
@@ -133,7 +93,7 @@ describe('点对点文本私聊', () => {
   })
 
   it('离线补投递：对方上线后收到通知并拉到新消息', async () => {
-    const { peerA, peerB, a, b, conversationId } = await setupDirectConversation()
+    const { peerA, peerB, a, b, conversationId } = await setupDirectConversation(app)
     // B 下线后 A 发消息
     b.ws.close()
     await new Promise((r) => setTimeout(r, 200))
@@ -141,7 +101,7 @@ describe('点对点文本私聊', () => {
     await a.wait('message')
 
     // B 重新上线
-    const b2 = await connectWs(peerB)
+    const b2 = await connectWs(app, peerB)
     await b2.wait('conversations-updated')
     const res = await fetch(`${app.baseUrl}/api/conversations/${conversationId}/messages`, {
       headers: { Cookie: `nw_peer=${peerB}` },

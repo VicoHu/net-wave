@@ -2,12 +2,21 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ChatBoxRenderConfig, Message } from '@douyinfe/semi-ui/lib/es/chat/interface'
-import { Avatar, Button, Chat, Empty, Input, List, Modal, Spin, Tag, Toast, Typography } from '@douyinfe/semi-ui'
-import { IconEdit, IconQrCode, IconWifi } from '@douyinfe/semi-icons'
+import { Avatar, Button, Chat, Empty, Image, Input, List, Modal, Spin, Tag, Toast, Typography } from '@douyinfe/semi-ui'
+import { IconDownload, IconEdit, IconFile, IconQrCode, IconWifi } from '@douyinfe/semi-icons'
 
 interface Peer {
   id: string
   name: string
+}
+
+interface FileMeta {
+  id: string
+  name: string
+  size: number
+  mime: string
+  kind: 'image' | 'file'
+  deleted: boolean
 }
 
 interface MessageRow {
@@ -16,6 +25,8 @@ interface MessageRow {
   senderId: string
   kind: string
   text: string | null
+  fileId: string | null
+  file: FileMeta | null
   createdAt: number
 }
 
@@ -34,6 +45,103 @@ interface CenterInfo {
 function extractCode(text: string): string | null {
   const match = text.match(/\d{4,8}/)
   return match?.[0] ?? null
+}
+
+function formatSize(size: number): string {
+  if (size >= 1024 ** 3) return `${(size / 1024 ** 3).toFixed(2)} GB`
+  if (size >= 1024 ** 2) return `${(size / 1024 ** 2).toFixed(1)} MB`
+  if (size >= 1024) return `${(size / 1024).toFixed(1)} KB`
+  return `${size} B`
+}
+
+/** 会话列表预览文案：文件类消息显示类型前缀 */
+function messagePreview(m: MessageRow | null): string {
+  if (!m) return ''
+  if (m.kind === 'image') return `[图片] ${m.file?.name ?? ''}`
+  if (m.kind === 'file') return `[文件] ${m.file?.name ?? ''}`
+  return m.text ?? ''
+}
+
+/** 文件消息卡片：XHR 下载以获得实时进度；被删除文件明确提示不可下载 */
+function FileCard({ file }: { file: FileMeta }) {
+  const [progress, setProgress] = useState<number | null>(null)
+
+  const download = () => {
+    const xhr = new XMLHttpRequest()
+    xhr.open('GET', `/api/files/${file.id}`)
+    xhr.responseType = 'blob'
+    xhr.onprogress = (e) => {
+      if (e.lengthComputable) setProgress(Math.round((e.loaded / e.total) * 100))
+    }
+    xhr.onload = () => {
+      if (xhr.status === 200) {
+        const url = URL.createObjectURL(xhr.response)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = file.name
+        a.click()
+        URL.revokeObjectURL(url)
+      } else if (xhr.status === 410) {
+        Toast.error('文件已被删除，无法下载')
+      } else {
+        Toast.error('下载失败')
+      }
+      setProgress(null)
+    }
+    xhr.onerror = () => {
+      Toast.error('下载失败')
+      setProgress(null)
+    }
+    xhr.send()
+  }
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 12,
+        padding: '10px 14px',
+        border: '1px solid var(--semi-color-border)',
+        borderRadius: 8,
+        minWidth: 220,
+      }}
+    >
+      <div
+        style={{
+          width: 40,
+          height: 40,
+          borderRadius: 8,
+          background: 'var(--semi-color-primary-light-default)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <IconFile />
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</div>
+        <Typography.Text type="tertiary" size="small">
+          {formatSize(file.size)}
+        </Typography.Text>
+      </div>
+      {file.deleted ? (
+        <Tag color="red" size="small">
+          已删除
+        </Tag>
+      ) : (
+        <Button
+          size="small"
+          icon={<IconDownload />}
+          loading={progress != null}
+          onClick={download}
+        >
+          {progress != null ? `${progress}%` : '下载'}
+        </Button>
+      )}
+    </div>
+  )
 }
 
 function useIsMobile() {
@@ -166,9 +274,27 @@ export default function Home() {
     }
   }
 
-  const sendMessage = (text: string) => {
+  const sendMessage = (text: string, attachments: { status?: string; response?: unknown }[] = []) => {
     if (!activeId || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return
-    wsRef.current.send(JSON.stringify({ type: 'send-message', conversationId: activeId, text }))
+    // 文本与附件分条发送：每条消息在气泡流中独立呈现
+    const trimmed = text.trim()
+    if (trimmed) {
+      wsRef.current.send(JSON.stringify({ type: 'send-message', conversationId: activeId, text: trimmed }))
+    }
+    for (const att of attachments) {
+      let response = att.response
+      if (typeof response === 'string') {
+        try {
+          response = JSON.parse(response)
+        } catch {
+          response = null
+        }
+      }
+      const fileId = (response as { fileId?: string } | null)?.fileId
+      if (att.status === 'success' && fileId) {
+        wsRef.current.send(JSON.stringify({ type: 'send-message', conversationId: activeId, fileId }))
+      }
+    }
   }
 
   // 验证码复制辅助：secure context 一键复制，否则降级为选中全文
@@ -196,6 +322,23 @@ export default function Home() {
       message?: Message
       defaultContent?: React.ReactNode
     }) => {
+      const contents = message && Array.isArray(message.content) ? message.content : null
+      const image = contents?.find((c: NonNullable<typeof contents>[number]) => c.type === 'image_url')
+      const file = contents?.find((c: NonNullable<typeof contents>[number]) => c.type === 'file_url')
+      if (image && image.type === 'image_url' && image.image_url) {
+        // 内联缩略图；Semi Image 点击即弹出大图预览
+        return (
+          <Image
+            src={image.image_url.url}
+            alt={(message?.nwFile as FileMeta | undefined)?.name ?? '图片消息'}
+            width={240}
+            style={{ borderRadius: 8, maxWidth: '100%' }}
+          />
+        )
+      }
+      if (file && file.type === 'file_url' && message?.nwFile) {
+        return <FileCard file={message.nwFile as FileMeta} />
+      }
       const code = typeof message?.content === 'string' ? extractCode(message.content) : null
       return (
         <div>
@@ -217,12 +360,25 @@ export default function Home() {
 
   const chats: Message[] = useMemo(
     () =>
-      messages.map((m) => ({
-        role: m.senderId === me?.id ? 'user' : 'assistant',
-        id: String(m.id),
-        createAt: m.createdAt,
-        content: m.text ?? '',
-      })),
+      messages.map((m) => {
+        const base = {
+          role: m.senderId === me?.id ? 'user' : 'assistant',
+          id: String(m.id),
+          createAt: m.createdAt,
+          // 附件元数据随消息传递，供自定义渲染使用
+          nwFile: m.file,
+        } as Message
+        if (m.kind === 'image' && m.file) {
+          return { ...base, content: [{ type: 'image_url', image_url: { url: `/api/files/${m.file.id}` } }] }
+        }
+        if (m.kind === 'file' && m.file) {
+          return {
+            ...base,
+            content: [{ type: 'file_url', file_url: { url: `/api/files/${m.file.id}`, name: m.file.name, size: formatSize(m.file.size), type: m.file.mime } }],
+          }
+        }
+        return { ...base, content: m.text ?? '' }
+      }),
     [messages, me],
   )
 
@@ -307,7 +463,7 @@ export default function Home() {
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontWeight: 600 }}>{conv.peer.name}</div>
                         <Typography.Text type="tertiary" size="small" ellipsis={{ showTooltip: false }} style={{ maxWidth: 160 }}>
-                          {conv.lastMessage?.text ?? ''}
+                          {messagePreview(conv.lastMessage)}
                         </Typography.Text>
                       </div>
                     </div>
@@ -363,7 +519,11 @@ export default function Home() {
                   <Chat
                     key={activeConversation.id}
                     chats={chats}
-                    onMessageSend={(content: string) => sendMessage(content)}
+                    onMessageSend={(content: string, attachment: { status?: string; response?: unknown }[]) =>
+                      sendMessage(content, attachment)
+                    }
+                    enableUpload
+                    uploadProps={{ action: '/api/files', name: 'file' }}
                     roleConfig={{
                       user: {
                         name: me?.name ?? '我',

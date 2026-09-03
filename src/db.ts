@@ -23,6 +23,15 @@ export function openDb(dataDir = process.env.DATA_DIR ?? './data'): Database.Dat
       created_at INTEGER NOT NULL,
       UNIQUE(peer_a, peer_b)
     );
+    CREATE TABLE IF NOT EXISTS files (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      size INTEGER NOT NULL,
+      mime TEXT NOT NULL,
+      uploaded_by TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      deleted_at INTEGER
+    );
     CREATE TABLE IF NOT EXISTS messages (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       conversation_id INTEGER NOT NULL,
@@ -33,5 +42,10 @@ export function openDb(dataDir = process.env.DATA_DIR ?? './data'): Database.Dat
     );
     CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id, id);
   `)
+  // 增量迁移：既有库的 messages 增加 file_id（SQLite 无 ADD COLUMN IF NOT EXISTS）
+  const columns = db.prepare('PRAGMA table_info(messages)').all() as { name: string }[]
+  if (!columns.some((c) => c.name === 'file_id')) {
+    db.exec('ALTER TABLE messages ADD COLUMN file_id TEXT')
+  }
   return db
 }

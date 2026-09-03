@@ -2,7 +2,7 @@ import { createServer } from 'node:http'
 import next from 'next'
 import { WebSocketServer } from 'ws'
 import { openDb } from './src/db'
-import { addMessage, findConversation, isParticipant } from './src/chat'
+import { addFileMessage, addMessage, findConversation, isParticipant } from './src/chat'
 import { findPeer } from './src/peers'
 import { getHub } from './src/hub'
 
@@ -64,7 +64,7 @@ wss.on('connection', (ws, req) => {
   ws.on('close', () => hub.remove(ws))
   ws.on('error', () => hub.remove(ws))
   ws.on('message', (raw) => {
-    let data: { type?: unknown; conversationId?: unknown; text?: unknown }
+    let data: { type?: unknown; conversationId?: unknown; text?: unknown; fileId?: unknown }
     try {
       data = JSON.parse(String(raw))
     } catch {
@@ -73,18 +73,33 @@ wss.on('connection', (ws, req) => {
     if (data.type !== 'send-message') return
 
     const conversationId = Number(data.conversationId)
-    const text = typeof data.text === 'string' ? data.text.trim() : ''
     const conversation = Number.isInteger(conversationId) ? findConversation(conversationId) : null
     if (!conversation || !isParticipant(conversation, peerId)) {
       ws.send(JSON.stringify({ type: 'error', message: '会话不存在或无权发送' }))
       return
     }
-    if (!text || text.length > 5000) {
-      ws.send(JSON.stringify({ type: 'error', message: '消息内容无效（1-5000 字符）' }))
+
+    // 文本与文件二选一：文件消息只携带上传后的 fileId，内容经 REST 流式传输
+    const hasText = typeof data.text === 'string' && data.text.trim() !== ''
+    const hasFile = typeof data.fileId === 'string' && data.fileId !== ''
+    let message: ReturnType<typeof addMessage> | null = null
+    if (hasText && !hasFile) {
+      const text = (data.text as string).trim()
+      if (text.length > 5000) {
+        ws.send(JSON.stringify({ type: 'error', message: '消息内容无效（1-5000 字符）' }))
+        return
+      }
+      message = addMessage(conversation.id, peerId, text)
+    } else if (hasFile && !hasText) {
+      message = addFileMessage(conversation.id, peerId, data.fileId as string)
+      if (!message) {
+        ws.send(JSON.stringify({ type: 'error', message: '文件不存在或已被删除' }))
+        return
+      }
+    } else {
+      ws.send(JSON.stringify({ type: 'error', message: '消息需且仅需 text 或 fileId 之一' }))
       return
     }
-
-    const message = addMessage(conversation.id, peerId, text)
     hub.sendToPeer(conversation.peerA, 'message', { message })
     hub.sendToPeer(conversation.peerB, 'message', { message })
   })
