@@ -1,7 +1,8 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
+import { useRouter, useSearchParams } from 'next/navigation'
 import type { ChatBoxRenderConfig, Message } from '@douyinfe/semi-ui/lib/es/chat/interface'
 import { Avatar, Button, Chat, Empty, Image, Input, List, Modal, Spin, Tag, Toast, Typography } from '@douyinfe/semi-ui'
 import { IconDownload, IconEdit, IconFile, IconPlus, IconQrCode, IconServer, IconWifi } from '@douyinfe/semi-icons'
@@ -168,12 +169,23 @@ function useIsMobile() {
 }
 
 export default function Home() {
+  // useSearchParams 需 Suspense 包裹以满足 SSR 边界要求
+  return (
+    <Suspense fallback={null}>
+      <HomeInner />
+    </Suspense>
+  )
+}
+
+function HomeInner() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
   const isMobile = useIsMobile()
   const [me, setMe] = useState<Peer | null>(null)
   const [peers, setPeers] = useState<Peer[]>([])
   const [conversations, setConversations] = useState<ConversationSummary[]>([])
   const [rooms, setRooms] = useState<RoomInfo[]>([])
-  const [activeId, setActiveId] = useState<number | null>(null)
+  const [unreadFlash, setUnreadFlash] = useState(false)
   const [messages, setMessages] = useState<MessageRow[]>([])
   const [centerInfo, setCenterInfo] = useState<CenterInfo | null>(null)
   const [qrVisible, setQrVisible] = useState(false)
@@ -183,6 +195,13 @@ export default function Home() {
   const [loadingMessages, setLoadingMessages] = useState(false)
   const wsRef = useRef<WebSocket | null>(null)
   const activeIdRef = useRef<number | null>(null)
+  const meRef = useRef<Peer | null>(null)
+  meRef.current = me
+
+  // 当前会话由 URL ?c=<id> 驱动：移动端单栏切换获得浏览器返回键支持，且可直达深链
+  const activeParam = searchParams.get('c')
+  const activeId = activeParam && /^\d+$/.test(activeParam) ? Number(activeParam) : null
+  activeIdRef.current = activeId
 
   const activeConversation = useMemo(
     () => conversations.find((c) => c.id === activeId) ?? null,
@@ -203,17 +222,33 @@ export default function Home() {
     setRooms(body.rooms)
   }, [])
 
-  const openConversation = useCallback(async (id: number) => {
-    setActiveId(id)
-    activeIdRef.current = id
-    setLoadingMessages(true)
-    const res = await fetch(`/api/conversations/${id}/messages`)
-    if (res.ok) {
-      const body = (await res.json()) as { messages: MessageRow[] }
-      setMessages(body.messages)
+  const openConversation = useCallback(
+    (id: number) => {
+      router.push(`/?c=${id}`)
+    },
+    [router],
+  )
+
+  // 会话切换由 URL 驱动：进入即拉取该会话历史
+  useEffect(() => {
+    if (activeId == null) {
+      setMessages([])
+      return
     }
-    setLoadingMessages(false)
-  }, [])
+    let cancelled = false
+    setLoadingMessages(true)
+    void (async () => {
+      const res = await fetch(`/api/conversations/${activeId}/messages`)
+      if (!cancelled && res.ok) {
+        const body = (await res.json()) as { messages: MessageRow[] }
+        setMessages(body.messages)
+      }
+      if (!cancelled) setLoadingMessages(false)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [activeId])
 
   /** 重新拉取当前打开会话的消息（离线补投递：断线重连后新消息自动出现） */
   const refreshActiveMessages = useCallback(async () => {
@@ -238,6 +273,10 @@ export default function Home() {
         if (message.conversationId === activeIdRef.current) {
           setMessages((prev) => (prev.some((m) => m.id === message.id) ? prev : [...prev, message]))
         }
+        // 页面不可见时收到他人消息：标题闪烁直至回到页面
+        if (message.senderId !== meRef.current?.id && document.hidden) {
+          setUnreadFlash(true)
+        }
         void loadConversations()
       } else if (data.type === 'conversations-updated') {
         void loadConversations()
@@ -250,6 +289,28 @@ export default function Home() {
       setTimeout(connectWs, 3000)
     }
   }, [loadConversations, loadRooms, refreshActiveMessages])
+
+  // 页内提醒：离开页面期间的新消息让标题在「新消息」与原标题间交替，回到页面即恢复
+  useEffect(() => {
+    if (!unreadFlash) return
+    let on = false
+    const timer = setInterval(() => {
+      on = !on
+      document.title = on ? '【新消息】net-wave' : 'net-wave'
+    }, 1000)
+    const stop = () => setUnreadFlash(false)
+    const onVisible = () => {
+      if (!document.hidden) stop()
+    }
+    window.addEventListener('focus', stop)
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      clearInterval(timer)
+      document.title = 'net-wave'
+      window.removeEventListener('focus', stop)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [unreadFlash])
 
   useEffect(() => {
     void (async () => {
@@ -279,7 +340,7 @@ export default function Home() {
     }
     const conversation = (await res.json()) as { id: number }
     await loadConversations()
-    await openConversation(conversation.id)
+    openConversation(conversation.id)
   }
 
   const createRoom = async () => {
@@ -298,7 +359,7 @@ export default function Home() {
     setRoomModalVisible(false)
     setRoomNameInput('')
     await Promise.all([loadRooms(), loadConversations()])
-    await openConversation(room.conversationId)
+    openConversation(room.conversationId)
   }
 
   const joinRoom = async (roomId: number) => {
@@ -309,7 +370,7 @@ export default function Home() {
     }
     const room = (await res.json()) as RoomInfo
     await Promise.all([loadRooms(), loadConversations()])
-    await openConversation(room.conversationId)
+    openConversation(room.conversationId)
   }
 
   const saveName = async () => {
@@ -369,6 +430,8 @@ export default function Home() {
   }
 
   const chatBoxRenderConfig: ChatBoxRenderConfig = {
+    // 去 AI 化：隐藏点赞/点踩/重新生成/删除等消息动作条（无对应功能，易误导）
+    renderChatBoxAction: () => null,
     // 房间多人会话下按消息显示发送者昵称（私聊与 roleConfig 一致）
     renderChatBoxTitle: ({ message, defaultTitle }) => ((message?.name as string | undefined) ?? defaultTitle) as React.ReactNode,
     renderChatBoxContent: ({
@@ -461,7 +524,7 @@ export default function Home() {
         }}
       >
         {isMobile && activeId !== null && (
-          <Button theme="borderless" onClick={() => setActiveId(null)}>
+          <Button theme="borderless" onClick={() => router.push('/')}>
             返回
           </Button>
         )}
