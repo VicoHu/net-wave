@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { canAccessConversation, findConversation } from '@/chat'
-import { findFile, readFileStream } from '@/files'
+import { deleteFile, findFile, readFileStream } from '@/files'
 import { findPeer } from '@/peers'
 import { openDb } from '@/db'
 
-export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const jar = await cookies()
   const peerId = jar.get('nw_peer')?.value
   if (!peerId || !findPeer(peerId)) {
@@ -42,4 +42,19 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       'Content-Disposition': `${disposition}; filename*=UTF-8''${encodeURIComponent(file.name)}`,
     },
   })
+}
+
+/** 存储管理：删除落盘文件并标记元数据；历史消息保留但下载入口失效 */
+export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const jar = await cookies()
+  const peerId = jar.get('nw_peer')?.value
+  if (!peerId || !findPeer(peerId)) {
+    return NextResponse.json({ error: '未识别的节点身份' }, { status: 401 })
+  }
+
+  const { id } = await params
+  if (!deleteFile(id)) {
+    return NextResponse.json({ error: '文件不存在' }, { status: 404 })
+  }
+  return NextResponse.json({ ok: true })
 }

@@ -1,9 +1,10 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import Link from 'next/link'
 import type { ChatBoxRenderConfig, Message } from '@douyinfe/semi-ui/lib/es/chat/interface'
 import { Avatar, Button, Chat, Empty, Image, Input, List, Modal, Spin, Tag, Toast, Typography } from '@douyinfe/semi-ui'
-import { IconDownload, IconEdit, IconFile, IconPlus, IconQrCode, IconWifi } from '@douyinfe/semi-icons'
+import { IconDownload, IconEdit, IconFile, IconPlus, IconQrCode, IconServer, IconWifi } from '@douyinfe/semi-icons'
 
 interface Peer {
   id: string
@@ -483,6 +484,11 @@ export default function Home() {
             </Button>
           </>
         )}
+        <Link href="/storage">
+          <Button icon={<IconServer />} size="small" theme="borderless">
+            存储
+          </Button>
+        </Link>
         <Button icon={<IconQrCode />} size="small" theme="borderless" onClick={() => setQrVisible(true)}>
           扫码加入
         </Button>
