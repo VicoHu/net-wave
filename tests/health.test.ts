@@ -21,8 +21,11 @@ describe('服务中心骨架', () => {
     await expect(res.json()).resolves.toEqual({ status: 'ok' })
   })
 
-  it('WS 握手成功并收到连接确认事件', async () => {
-    const ws = new WebSocket(app.wsUrl)
+  it('WS 握手成功并收到连接确认事件（携带节点身份）', async () => {
+    // T3 起 WS 需先经 /api/me 建立节点身份
+    const meRes = await fetch(`${app.baseUrl}/api/me`)
+    const cookie = (meRes.headers.get('set-cookie') ?? '').split(';')[0]
+    const ws = new WebSocket(app.wsUrl, { headers: { Cookie: cookie } })
     const opened = new Promise<void>((resolve, reject) => {
       ws.once('open', () => resolve())
       ws.once('error', reject)
