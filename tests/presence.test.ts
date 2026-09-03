@@ -1,25 +1,11 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import WebSocket from 'ws'
 import { startApp, type AppHandle } from './helpers/startApp'
+import { watchMessages, type WsWaiter } from './helpers/wsEvents'
 
 let app: AppHandle
 
-/** 收集一个 WS 上指定类型的事件，直到满足条件或超时 */
-function waitForEvent<T>(ws: WebSocket, type: string, filter?: (data: T) => boolean, timeoutMs = 10_000): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(`等待 WS 事件 ${type} 超时`)), timeoutMs)
-    ws.on('message', (raw) => {
-      const data = JSON.parse(String(raw))
-      if (data.type === type && (!filter || filter(data))) {
-        clearTimeout(timer)
-        resolve(data)
-      }
-    })
-    ws.on('error', reject)
-  })
-}
-
-/** 通过 REST 建立节点身份，返回 peerId（cookie 值） */
+/** 通过 REST 建立节点身份，返回 cookie 值 */
 async function createPeer(): Promise<string> {
   const res = await fetch(`${app.baseUrl}/api/me`)
   expect(res.status).toBe(200)
@@ -29,10 +15,11 @@ async function createPeer(): Promise<string> {
   return match[1]
 }
 
-function connectWs(peerId: string): Promise<WebSocket> {
+/** 连接 WS 并在 open 同步挂上消息观察器（缓冲全部消息，等待不丢事件） */
+function connectWs(peerId: string): Promise<{ ws: WebSocket; wait: WsWaiter }> {
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(app.wsUrl, { headers: { Cookie: `nw_peer=${peerId}` } })
-    ws.once('open', () => resolve(ws))
+    ws.once('open', () => resolve({ ws, wait: watchMessages(ws) }))
     ws.once('error', reject)
   })
 }
@@ -67,44 +54,43 @@ describe('节点身份与在线列表', () => {
     const peerA = await createPeer()
     const peerB = await createPeer()
 
-    const wsA = await connectWs(peerA)
-    // A 上线：presence 只含 A
-    const p1 = await waitForEvent<{ peers: { id: string }[] }>(wsA, 'presence', (d) => d.peers.length === 1)
-    expect(p1.peers[0].id).toBe(peerA)
+    const a = await connectWs(peerA)
+    // A 上线：presence 包含 A
+    const p1 = await a.wait('presence', (d: { peers: { id: string }[] }) => d.peers.some((p) => p.id === peerA))
+    expect(p1.peers.some((p: { id: string }) => p.id === peerA)).toBe(true)
 
-    const wsB = await connectWs(peerB)
-    // B 上线：双方都应收到含两人的 presence
-    const [aSees, bSees] = await Promise.all([
-      waitForEvent<{ peers: { id: string }[] }>(wsA, 'presence', (d) => d.peers.length === 2),
-      waitForEvent<{ peers: { id: string }[] }>(wsB, 'presence', (d) => d.peers.length === 2),
-    ])
-    expect(new Set(aSees.peers.map((p) => p.id))).toEqual(new Set([peerA, peerB]))
-    expect(new Set(bSees.peers.map((p) => p.id))).toEqual(new Set([peerA, peerB]))
+    const b = await connectWs(peerB)
+    // B 上线：双方都收到包含两人的 presence（包含式断言，不依赖全局连接数）
+    const hasBoth = (d: { peers: { id: string }[] }) =>
+      d.peers.some((p) => p.id === peerA) && d.peers.some((p) => p.id === peerB)
+    await Promise.all([a.wait('presence', hasBoth), b.wait('presence', hasBoth)])
 
-    // A 下线：B 收到只剩自己的 presence
-    wsA.close()
-    const p3 = await waitForEvent<{ peers: { id: string }[] }>(wsB, 'presence', (d) => d.peers.length === 1)
-    expect(p3.peers[0].id).toBe(peerB)
-    wsB.close()
+    // A 下线：B 收到不再包含 A 的 presence
+    a.ws.close()
+    const p3 = await b.wait(
+      'presence',
+      (d: { peers: { id: string }[] }) => !d.peers.some((p) => p.id === peerA) && d.peers.some((p) => p.id === peerB),
+    )
+    expect(p3.peers.some((p: { id: string }) => p.id === peerA)).toBe(false)
+    b.ws.close()
   })
 
   it('修改昵称后 presence 广播新昵称', async () => {
     const peerA = await createPeer()
     const peerB = await createPeer()
 
-    const wsA = await connectWs(peerA)
-    await waitForEvent(wsA, 'presence')
-    const wsB = await connectWs(peerB)
+    const a = await connectWs(peerA)
+    await a.wait('presence')
+    const b = await connectWs(peerB)
     await Promise.all([
-      waitForEvent<{ peers: { id: string }[] }>(wsA, 'presence', (d) => d.peers.length === 2),
-      waitForEvent<{ peers: { id: string }[] }>(wsB, 'presence', (d) => d.peers.length === 2),
+      a.wait('presence', (d: { peers: { id: string }[] }) => d.peers.some((p) => p.id === peerB)),
+      b.wait('presence', (d: { peers: { id: string }[] }) => d.peers.some((p) => p.id === peerA)),
     ])
 
     // 先注册等待再触发：WS 广播可能先于 HTTP 响应到达
-    const updatedPromise = waitForEvent<{ peers: { id: string; name: string }[] }>(
-      wsB,
+    const updatedPromise = b.wait(
       'presence',
-      (d) => d.peers.some((p) => p.id === peerA && p.name === '改名后的A'),
+      (d: { peers: { id: string; name: string }[] }) => d.peers.some((p) => p.id === peerA && p.name === '改名后的A'),
     )
     const res = await fetch(`${app.baseUrl}/api/me`, {
       method: 'PATCH',
@@ -114,10 +100,10 @@ describe('节点身份与在线列表', () => {
     expect(res.status).toBe(200)
 
     const updated = await updatedPromise
-    expect(updated.peers.find((p) => p.id === peerA)?.name).toBe('改名后的A')
+    expect(updated.peers.find((p: { id: string }) => p.id === peerA)?.name).toBe('改名后的A')
 
-    wsA.close()
-    wsB.close()
+    a.ws.close()
+    b.ws.close()
   })
 
   it('中心信息端点返回局域网地址与二维码', async () => {

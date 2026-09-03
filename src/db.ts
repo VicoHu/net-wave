@@ -16,6 +16,22 @@ export function openDb(dataDir = process.env.DATA_DIR ?? './data'): Database.Dat
       name TEXT NOT NULL,
       created_at INTEGER NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS conversations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      peer_a TEXT NOT NULL,
+      peer_b TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      UNIQUE(peer_a, peer_b)
+    );
+    CREATE TABLE IF NOT EXISTS messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      conversation_id INTEGER NOT NULL,
+      sender_id TEXT NOT NULL,
+      kind TEXT NOT NULL DEFAULT 'text',
+      text TEXT,
+      created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id, id);
   `)
   return db
 }

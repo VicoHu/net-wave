@@ -15,6 +15,7 @@ export interface Hub {
   add(ws: WebSocket, peerId: string): void
   remove(ws: WebSocket): void
   broadcast(type: string, payload: Record<string, unknown>): void
+  sendToPeer(peerId: string, type: string, payload: Record<string, unknown>): void
   notifyPresenceChanged(): void
   onlinePeers(): OnlinePeer[]
 }
@@ -38,6 +39,12 @@ function createHub(): Hub {
       const data = JSON.stringify({ type, ...payload })
       for (const ws of connections.keys()) {
         if (ws.readyState === ws.OPEN) ws.send(data)
+      }
+    },
+    sendToPeer(peerId: string, type: string, payload: Record<string, unknown>) {
+      const data = JSON.stringify({ type, ...payload })
+      for (const [ws, id] of connections) {
+        if (id === peerId && ws.readyState === ws.OPEN) ws.send(data)
       }
     },
     notifyPresenceChanged() {
