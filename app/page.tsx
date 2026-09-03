@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ChatBoxRenderConfig, Message } from '@douyinfe/semi-ui/lib/es/chat/interface'
 import { Avatar, Button, Chat, Empty, Image, Input, List, Modal, Spin, Tag, Toast, Typography } from '@douyinfe/semi-ui'
-import { IconDownload, IconEdit, IconFile, IconQrCode, IconWifi } from '@douyinfe/semi-icons'
+import { IconDownload, IconEdit, IconFile, IconPlus, IconQrCode, IconWifi } from '@douyinfe/semi-icons'
 
 interface Peer {
   id: string
@@ -23,6 +23,7 @@ interface MessageRow {
   id: number
   conversationId: number
   senderId: string
+  senderName: string
   kind: string
   text: string | null
   fileId: string | null
@@ -30,9 +31,18 @@ interface MessageRow {
   createdAt: number
 }
 
+interface RoomInfo {
+  id: number
+  name: string
+  memberCount: number
+  conversationId: number
+}
+
 interface ConversationSummary {
   id: number
-  peer: Peer
+  type: 'direct' | 'room'
+  peer?: { id: string; name: string }
+  room?: { id: number; name: string; memberCount: number }
   lastMessage: MessageRow | null
 }
 
@@ -161,10 +171,13 @@ export default function Home() {
   const [me, setMe] = useState<Peer | null>(null)
   const [peers, setPeers] = useState<Peer[]>([])
   const [conversations, setConversations] = useState<ConversationSummary[]>([])
+  const [rooms, setRooms] = useState<RoomInfo[]>([])
   const [activeId, setActiveId] = useState<number | null>(null)
   const [messages, setMessages] = useState<MessageRow[]>([])
   const [centerInfo, setCenterInfo] = useState<CenterInfo | null>(null)
   const [qrVisible, setQrVisible] = useState(false)
+  const [roomModalVisible, setRoomModalVisible] = useState(false)
+  const [roomNameInput, setRoomNameInput] = useState('')
   const [editingName, setEditingName] = useState('')
   const [loadingMessages, setLoadingMessages] = useState(false)
   const wsRef = useRef<WebSocket | null>(null)
@@ -180,6 +193,13 @@ export default function Home() {
     if (!res.ok) return
     const body = (await res.json()) as { conversations: ConversationSummary[] }
     setConversations(body.conversations)
+  }, [])
+
+  const loadRooms = useCallback(async () => {
+    const res = await fetch('/api/rooms')
+    if (!res.ok) return
+    const body = (await res.json()) as { rooms: RoomInfo[] }
+    setRooms(body.rooms)
   }, [])
 
   const openConversation = useCallback(async (id: number) => {
@@ -221,12 +241,14 @@ export default function Home() {
       } else if (data.type === 'conversations-updated') {
         void loadConversations()
         void refreshActiveMessages()
+      } else if (data.type === 'rooms-updated') {
+        void loadRooms()
       }
     }
     ws.onclose = () => {
       setTimeout(connectWs, 3000)
     }
-  }, [loadConversations, refreshActiveMessages])
+  }, [loadConversations, loadRooms, refreshActiveMessages])
 
   useEffect(() => {
     void (async () => {
@@ -234,6 +256,7 @@ export default function Home() {
       setMe((await meRes.json()) as Peer)
       connectWs()
       void loadConversations()
+      void loadRooms()
       const infoRes = await fetch('/api/center-info')
       setCenterInfo((await infoRes.json()) as CenterInfo)
     })()
@@ -256,6 +279,36 @@ export default function Home() {
     const conversation = (await res.json()) as { id: number }
     await loadConversations()
     await openConversation(conversation.id)
+  }
+
+  const createRoom = async () => {
+    const name = roomNameInput.trim()
+    if (!name) return
+    const res = await fetch('/api/rooms', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    })
+    if (!res.ok) {
+      Toast.error('创建房间失败（名称需 1-50 字符）')
+      return
+    }
+    const room = (await res.json()) as RoomInfo
+    setRoomModalVisible(false)
+    setRoomNameInput('')
+    await Promise.all([loadRooms(), loadConversations()])
+    await openConversation(room.conversationId)
+  }
+
+  const joinRoom = async (roomId: number) => {
+    const res = await fetch(`/api/rooms/${roomId}/join`, { method: 'POST' })
+    if (!res.ok) {
+      Toast.error('加入房间失败')
+      return
+    }
+    const room = (await res.json()) as RoomInfo
+    await Promise.all([loadRooms(), loadConversations()])
+    await openConversation(room.conversationId)
   }
 
   const saveName = async () => {
@@ -315,6 +368,8 @@ export default function Home() {
   }
 
   const chatBoxRenderConfig: ChatBoxRenderConfig = {
+    // 房间多人会话下按消息显示发送者昵称（私聊与 roleConfig 一致）
+    renderChatBoxTitle: ({ message, defaultTitle }) => ((message?.name as string | undefined) ?? defaultTitle) as React.ReactNode,
     renderChatBoxContent: ({
       message,
       defaultContent,
@@ -363,6 +418,7 @@ export default function Home() {
       messages.map((m) => {
         const base = {
           role: m.senderId === me?.id ? 'user' : 'assistant',
+          name: m.senderId === me?.id ? (me?.name ?? '我') : m.senderName,
           id: String(m.id),
           createAt: m.createdAt,
           // 附件元数据随消息传递，供自定义渲染使用
@@ -382,8 +438,10 @@ export default function Home() {
     [messages, me],
   )
 
-  const conversationPeerIds = new Set(conversations.map((c) => c.peer.id))
+  const conversationPeerIds = new Set(conversations.filter((c) => c.type === 'direct').map((c) => c.peer?.id))
+  const joinedRoomIds = new Set(conversations.filter((c) => c.type === 'room').map((c) => c.room?.id))
   const startablePeers = peers.filter((p) => p.id !== me?.id && !conversationPeerIds.has(p.id))
+  const joinableRooms = rooms.filter((r) => !joinedRoomIds.has(r.id))
 
   const showSidebar = !isMobile || activeId === null
   const showChat = !isMobile || activeId !== null
@@ -442,12 +500,15 @@ export default function Home() {
               boxSizing: 'border-box',
             }}
           >
-            <Typography.Title heading={6} style={{ marginBottom: 8 }}>
-              会话
+            <Typography.Title heading={6} style={{ marginBottom: 8, display: 'flex', alignItems: 'center' }}>
+              <span style={{ flex: 1 }}>会话</span>
+              <Button size="small" theme="borderless" icon={<IconPlus />} onClick={() => setRoomModalVisible(true)}>
+                建房
+              </Button>
             </Typography.Title>
             <List
               dataSource={conversations}
-              emptyContent={<Empty description="暂无会话，从下方在线节点开始" />}
+              emptyContent={<Empty description="暂无会话，从下方房间或在线节点开始" />}
               renderItem={(conv) => (
                 <List.Item
                   style={{
@@ -457,15 +518,55 @@ export default function Home() {
                   }}
                   main={
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%' }} onClick={() => void openConversation(conv.id)}>
-                      <Avatar size="small" color="blue">
-                        {conv.peer.name.slice(-1)}
-                      </Avatar>
+                      {conv.type === 'room' ? (
+                        <Avatar size="small" color="violet" style={{ flexShrink: 0 }}>
+                          {conv.room?.name.slice(0, 1)}
+                        </Avatar>
+                      ) : (
+                        <Avatar size="small" color="blue" style={{ flexShrink: 0 }}>
+                          {conv.peer?.name.slice(-1)}
+                        </Avatar>
+                      )}
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontWeight: 600 }}>{conv.peer.name}</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {conv.type === 'room' ? conv.room?.name : conv.peer?.name}
+                          </span>
+                          {conv.type === 'room' && (
+                            <Tag size="small" color="violet">
+                              {conv.room?.memberCount} 人
+                            </Tag>
+                          )}
+                        </div>
                         <Typography.Text type="tertiary" size="small" ellipsis={{ showTooltip: false }} style={{ maxWidth: 160 }}>
                           {messagePreview(conv.lastMessage)}
                         </Typography.Text>
                       </div>
+                    </div>
+                  }
+                />
+              )}
+            />
+
+            <Typography.Title heading={6} style={{ margin: '16px 0 8px' }}>
+              房间
+            </Typography.Title>
+            <List
+              dataSource={joinableRooms}
+              emptyContent={<Typography.Text type="tertiary" size="small">暂无可加入的公开房间</Typography.Text>}
+              renderItem={(room) => (
+                <List.Item
+                  style={{ cursor: 'pointer', borderRadius: 8 }}
+                  main={
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }} onClick={() => void joinRoom(room.id)}>
+                      <Avatar size="small" color="violet" style={{ flexShrink: 0 }}>
+                        {room.name.slice(0, 1)}
+                      </Avatar>
+                      <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{room.name}</span>
+                      <Tag size="small">{room.memberCount} 人</Tag>
+                      <Tag size="small" color="cyan">
+                        加入
+                      </Tag>
                     </div>
                   }
                 />
@@ -510,10 +611,24 @@ export default function Home() {
                     gap: 10,
                   }}
                 >
-                  <Avatar size="extra-small" color="blue">
-                    {activeConversation.peer.name.slice(-1)}
-                  </Avatar>
-                  <Typography.Text strong>{activeConversation.peer.name}</Typography.Text>
+                  {activeConversation.type === 'room' ? (
+                    <>
+                      <Avatar size="extra-small" color="violet">
+                        {activeConversation.room?.name.slice(0, 1)}
+                      </Avatar>
+                      <Typography.Text strong>{activeConversation.room?.name}</Typography.Text>
+                      <Typography.Text type="tertiary" size="small">
+                        {activeConversation.room?.memberCount} 人
+                      </Typography.Text>
+                    </>
+                  ) : (
+                    <>
+                      <Avatar size="extra-small" color="blue">
+                        {activeConversation.peer?.name.slice(-1)}
+                      </Avatar>
+                      <Typography.Text strong>{activeConversation.peer?.name}</Typography.Text>
+                    </>
+                  )}
                 </div>
                 <div style={{ flex: 1, minHeight: 0 }}>
                   <Chat
@@ -529,10 +644,16 @@ export default function Home() {
                         name: me?.name ?? '我',
                         avatar: <Avatar color="amber">{me?.name.slice(-1) ?? '我'}</Avatar>,
                       },
-                      assistant: {
-                        name: activeConversation.peer.name,
-                        avatar: <Avatar color="blue">{activeConversation.peer.name.slice(-1)}</Avatar>,
-                      },
+                      assistant:
+                        activeConversation.type === 'room'
+                          ? {
+                              name: activeConversation.room?.name ?? '房间',
+                              avatar: <Avatar color="violet">{activeConversation.room?.name.slice(0, 1) ?? '房'}</Avatar>,
+                            }
+                          : {
+                              name: activeConversation.peer?.name ?? '对方',
+                              avatar: <Avatar color="blue">{activeConversation.peer?.name.slice(-1) ?? '?'}</Avatar>,
+                            },
                     }}
                     chatBoxRenderConfig={chatBoxRenderConfig}
                     placeholder="输入消息，Enter 发送…"
@@ -553,6 +674,24 @@ export default function Home() {
           </main>
         )}
       </div>
+
+      <Modal
+        title="创建房间"
+        visible={roomModalVisible}
+        onCancel={() => setRoomModalVisible(false)}
+        onOk={() => void createRoom()}
+        okText="创建并进入"
+        centered
+      >
+        <Input
+          placeholder="房间名称（1-50 字符）"
+          value={roomNameInput}
+          onChange={setRoomNameInput}
+          maxLength={50}
+          onEnterPress={() => void createRoom()}
+          autoFocus
+        />
+      </Modal>
 
       <Modal
         title="手机扫码加入"

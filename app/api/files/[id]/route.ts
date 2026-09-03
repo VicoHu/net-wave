@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
-import { findConversation, isParticipant } from '@/chat'
+import { canAccessConversation, findConversation } from '@/chat'
 import { findFile, readFileStream } from '@/files'
 import { findPeer } from '@/peers'
 import { openDb } from '@/db'
@@ -26,7 +26,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const ref = db.prepare('SELECT conversation_id FROM messages WHERE file_id = ? LIMIT 1').get(id) as { conversation_id: number } | undefined
   if (ref) {
     const conversation = findConversation(ref.conversation_id)
-    if (!conversation || !isParticipant(conversation, peerId)) {
+    if (!conversation || !canAccessConversation(conversation, peerId)) {
       return NextResponse.json({ error: '无权访问该文件' }, { status: 403 })
     }
   } else if (file.uploadedBy !== peerId) {

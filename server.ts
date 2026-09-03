@@ -2,8 +2,9 @@ import { createServer } from 'node:http'
 import next from 'next'
 import { WebSocketServer } from 'ws'
 import { openDb } from './src/db'
-import { addFileMessage, addMessage, findConversation, isParticipant } from './src/chat'
+import { addFileMessage, addMessage, canAccessConversation, findConversation, type MessageRow } from './src/chat'
 import { findPeer } from './src/peers'
+import { roomMemberIds } from './src/rooms'
 import { getHub } from './src/hub'
 
 const dev = process.env.NODE_ENV !== 'production'
@@ -74,7 +75,7 @@ wss.on('connection', (ws, req) => {
 
     const conversationId = Number(data.conversationId)
     const conversation = Number.isInteger(conversationId) ? findConversation(conversationId) : null
-    if (!conversation || !isParticipant(conversation, peerId)) {
+    if (!conversation || !canAccessConversation(conversation, peerId)) {
       ws.send(JSON.stringify({ type: 'error', message: '会话不存在或无权发送' }))
       return
     }
@@ -82,7 +83,7 @@ wss.on('connection', (ws, req) => {
     // 文本与文件二选一：文件消息只携带上传后的 fileId，内容经 REST 流式传输
     const hasText = typeof data.text === 'string' && data.text.trim() !== ''
     const hasFile = typeof data.fileId === 'string' && data.fileId !== ''
-    let message: ReturnType<typeof addMessage> | null = null
+    let message: MessageRow | null = null
     if (hasText && !hasFile) {
       const text = (data.text as string).trim()
       if (text.length > 5000) {
@@ -100,8 +101,14 @@ wss.on('connection', (ws, req) => {
       ws.send(JSON.stringify({ type: 'error', message: '消息需且仅需 text 或 fileId 之一' }))
       return
     }
-    hub.sendToPeer(conversation.peerA, 'message', { message })
-    hub.sendToPeer(conversation.peerB, 'message', { message })
+    // 私聊投双方；房间投全体成员
+    const recipients =
+      conversation.type === 'room' && conversation.roomId != null
+        ? roomMemberIds(conversation.roomId)
+        : [conversation.peerA, conversation.peerB]
+    for (const recipient of recipients) {
+      if (recipient) hub.sendToPeer(recipient, 'message', { message })
+    }
   })
 })
 

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
-import { findConversation, isParticipant, listMessages } from '@/chat'
+import { canAccessConversation, findConversation, listMessages } from '@/chat'
 import { findPeer } from '@/peers'
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -16,7 +16,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   if (!conversation) {
     return NextResponse.json({ error: '会话不存在' }, { status: 404 })
   }
-  if (!isParticipant(conversation, peerId)) {
+  if (!canAccessConversation(conversation, peerId)) {
     return NextResponse.json({ error: '无权访问该会话' }, { status: 403 })
   }
 
