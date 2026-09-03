@@ -99,3 +99,17 @@
 3. 只有在 CodeGraph 无法解析路径或符号时，才回退到 grep 或读取文件。
 4. 除非仍然缺少某个特定文件细节，否则应将 CodeGraph 返回的源码/上下文视为足够信息。  
 对于简单的字面量字符串匹配，可以使用 grep。
+
+## Agent skills
+
+### Issue tracker
+
+Issue 由 GitHub Issues 跟踪，通过 `gh` CLI 操作。详见 `docs/agents/issue-tracker.md`。
+
+### Triage labels
+
+使用五个默认 triage 标签（needs-triage / needs-info / ready-for-agent / ready-for-human / wontfix）。详见 `docs/agents/triage-labels.md`。
+
+### Domain docs
+
+single-context 布局：根目录 `CONTEXT.md` + `docs/adr/`。详见 `docs/agents/domain.md`。
