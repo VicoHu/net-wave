@@ -9,8 +9,8 @@ interface AppRailProps {
 }
 
 /**
- * 最左侧服务器栏（Discord rail）：本中心只有一个「服务」，因此只承载
- * 品牌入口与创建房间动作；存储 / 扫码收在底部用户面板。
+ * 最左侧服务中心栏（Discord rail）：本中心只有一个「服务」，因此只承载
+ * 品牌入口与创建房间动作；存储 / 扫码收在底部节点面板。
  */
 export function AppRail({ onCreateRoom }: AppRailProps) {
   return (

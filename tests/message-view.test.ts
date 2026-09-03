@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   avatarColor,
   buildBlocks,
+  conversationName,
   formatDayDivider,
   formatTime,
   type MessageRow,
@@ -135,8 +136,20 @@ describe('formatTime', () => {
   })
 })
 
-describe('avatarColor', () => {
-  it('同一名字始终返回同一颜色', () => {
+describe('conversationName', () => {
+  it('房间会话返回房间名', () => {
+    expect(conversationName({ type: 'room', room: { name: '周末开黑' } })).toBe('周末开黑')
+  })
+  it('私聊会话返回对方节点名', () => {
+    expect(conversationName({ type: 'direct', peer: { name: '安静的企鹅' } })).toBe('安静的企鹅')
+  })
+  it('信息缺失时给出兜底名', () => {
+    expect(conversationName({ type: 'room' })).toBe('未知会话')
+    expect(conversationName({ type: 'direct' })).toBe('未知会话')
+  })
+})
+
+describe('avatarColor', () => {  it('同一名字始终返回同一颜色', () => {
     expect(avatarColor('安静的企鹅')).toBe(avatarColor('安静的企鹅'))
   })
 

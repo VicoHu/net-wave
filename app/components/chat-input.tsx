@@ -16,15 +16,13 @@ interface ChatInputProps {
   placeholder: string
   onSendText: (text: string) => void
   onSendFile: (fileId: string) => void
-  /** 会话未就绪时禁用输入 */
-  disabled?: boolean
 }
 
 /**
  * Discord 式输入条：+ 上传附件（XHR 实时进度，完成后立即作为消息发出）、
  * Enter 发送 / Shift+Enter 换行（兼容中文输入法组词态）、文本非空时出现发送按钮。
  */
-export function ChatInput({ placeholder, onSendText, onSendFile, disabled }: ChatInputProps) {
+export function ChatInput({ placeholder, onSendText, onSendFile }: ChatInputProps) {
   const [text, setText] = useState('')
   const [uploads, setUploads] = useState<UploadTask[]>([])
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -40,7 +38,7 @@ export function ChatInput({ placeholder, onSendText, onSendFile, disabled }: Cha
 
   const send = () => {
     const trimmed = text.trim()
-    if (!trimmed || disabled) return
+    if (!trimmed) return
     onSendText(trimmed)
     setText('')
     requestAnimationFrame(autoResize)
@@ -108,7 +106,6 @@ export function ChatInput({ placeholder, onSendText, onSendFile, disabled }: Cha
           variant="ghost"
           size="icon-sm"
           className="rounded-full text-muted-foreground hover:text-foreground"
-          disabled={disabled}
           onClick={() => fileInputRef.current?.click()}
           aria-label="上传附件"
         >
@@ -118,10 +115,9 @@ export function ChatInput({ placeholder, onSendText, onSendFile, disabled }: Cha
           ref={textareaRef}
           rows={1}
           value={text}
-          disabled={disabled}
           placeholder={placeholder}
           aria-label="输入消息"
-          className="max-h-48 flex-1 resize-none self-center bg-transparent px-1 py-1.5 text-[15px] outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed"
+          className="max-h-48 flex-1 resize-none self-center bg-transparent px-1 py-1.5 text-[15px] outline-none placeholder:text-muted-foreground"
           onChange={(e) => {
             setText(e.target.value)
             autoResize()

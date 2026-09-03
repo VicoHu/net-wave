@@ -95,8 +95,8 @@ export default function StoragePage() {
             </EmptyHeader>
           </Empty>
         ) : (
-          <div className="overflow-hidden rounded-xl bg-sidebar">
-            <Table>
+          <div className="overflow-x-auto rounded-xl bg-sidebar">
+            <Table className="min-w-[560px]">
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
                   <TableHead>文件名</TableHead>

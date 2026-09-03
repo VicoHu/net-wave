@@ -14,13 +14,8 @@ import { CreateRoomDialog, QrDialog } from './components/dialogs'
 import { MessageList } from './components/message-list'
 import { UserAvatar } from './components/user-avatar'
 import { cn } from '@lib/utils'
-import type { MessageRow } from './message-view'
-import type { ConversationSummary, Peer, RoomInfo } from './types'
-
-interface CenterInfo {
-  lanUrl: string
-  qrDataUrl: string
-}
+import { conversationName, type MessageRow } from './message-view'
+import type { ConversationSummary, CenterInfo, Peer, RoomInfo } from './types'
 
 function useIsMobile() {
   const [isMobile, setIsMobile] = useState(false)
@@ -300,9 +295,7 @@ function HomeInner() {
               {activeConversation.type === 'room' ? (
                 <>
                   <HashIcon className="size-5 shrink-0 text-muted-foreground" />
-                  <h1 className="truncate font-semibold">
-                    {activeConversation.room?.name ?? '房间'}
-                  </h1>
+                  <h1 className="truncate font-semibold">{conversationName(activeConversation)}</h1>
                   <span className="hidden shrink-0 text-sm text-muted-foreground sm:inline">
                     {activeConversation.room?.memberCount} 名成员
                   </span>
@@ -310,13 +303,11 @@ function HomeInner() {
               ) : (
                 <>
                   <UserAvatar
-                    name={activeConversation.peer?.name ?? '?'}
+                    name={conversationName(activeConversation)}
                     className="size-6"
                     dotClassName="ring-chat"
                   />
-                  <h1 className="truncate font-semibold">
-                    {activeConversation.peer?.name ?? '私聊'}
-                  </h1>
+                  <h1 className="truncate font-semibold">{conversationName(activeConversation)}</h1>
                 </>
               )}
             </header>
@@ -332,8 +323,8 @@ function HomeInner() {
             <ChatInput
               placeholder={
                 activeConversation.type === 'room'
-                  ? `发送消息到 ${activeConversation.room?.name ?? '房间'}`
-                  : `发送消息给 ${activeConversation.peer?.name ?? '对方'}`
+                  ? `发送消息到 ${conversationName(activeConversation)}`
+                  : `发送消息给 ${conversationName(activeConversation)}`
               }
               onSendText={(text) => sendMessage({ text })}
               onSendFile={(fileId) => sendMessage({ fileId })}

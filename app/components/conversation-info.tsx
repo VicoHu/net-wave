@@ -2,7 +2,7 @@
 
 import { Badge } from '@components/ui/badge'
 import { UserAvatar } from './user-avatar'
-import { avatarColor } from '../message-view'
+import { avatarColor, conversationName } from '../message-view'
 import type { ConversationSummary } from '../types'
 
 /**
@@ -11,9 +11,7 @@ import type { ConversationSummary } from '../types'
  */
 export function ConversationInfo({ conversation }: { conversation: ConversationSummary }) {
   const isRoom = conversation.type === 'room'
-  const name = isRoom
-    ? (conversation.room?.name ?? '未知房间')
-    : (conversation.peer?.name ?? '未知节点')
+  const name = conversationName(conversation)
   const bannerColor = isRoom ? 'var(--primary)' : avatarColor(name)
 
   return (
@@ -31,8 +29,8 @@ export function ConversationInfo({ conversation }: { conversation: ConversationS
         <div className="flex flex-col gap-1.5">
           <div className="flex items-center gap-2">
             <h2 className="truncate text-lg font-bold">{name}</h2>
-            <Badge variant="secondary" className="shrink-0 rounded-full">
-              {isRoom ? '房间' : '私聊'}
+            <Badge className="shrink-0 rounded-full bg-primary text-primary-foreground">
+              {isRoom ? '房间' : '私信'}
             </Badge>
           </div>
           {isRoom && (

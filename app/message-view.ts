@@ -43,16 +43,27 @@ const dayKey = (t: number): number => {
 
 /** 日期分隔标签：今天 / 昨天 / 「YYYY年M月D日」 */
 export function formatDayDivider(t: number, now: number): string {
-  const sod = (x: number) => {
+  const startOfDay = (x: number) => {
     const d = new Date(x)
     d.setHours(0, 0, 0, 0)
     return d.getTime()
   }
-  const dayDiff = Math.round((sod(now) - sod(t)) / 86_400_000)
+  const dayDiff = Math.round((startOfDay(now) - startOfDay(t)) / 86_400_000)
   if (dayDiff <= 0) return '今天'
   if (dayDiff === 1) return '昨天'
   const d = new Date(t)
   return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`
+}
+
+/** 会话显示名：房间名 / 对方节点名（信息缺失时兜底） */
+export function conversationName(
+  conv: Pick<import('./types').ConversationSummary, 'type'> & {
+    peer?: { name: string } | null
+    room?: { name: string } | null
+  },
+): string {
+  if (conv.type === 'room') return conv.room?.name ?? '未知会话'
+  return conv.peer?.name ?? '未知会话'
 }
 
 /** 消息时间戳：「YYYY/M/D HH:mm」24 小时制 */

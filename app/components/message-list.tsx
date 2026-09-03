@@ -12,6 +12,7 @@ import {
   MessageScrollerViewport,
 } from '@components/ui/message-scroller'
 import { Button } from '@components/ui/button'
+import { Dialog, DialogContent, DialogTitle } from '@components/ui/dialog'
 import { Skeleton } from '@components/ui/skeleton'
 import { UserAvatar } from './user-avatar'
 import { cn } from '@lib/utils'
@@ -111,18 +112,20 @@ function FileCard({ file }: { file: NonNullable<MessageRow['file']> }) {
   )
 }
 
-/** 单条消息正文：文本（含验证码复制 chip）/ 图片 / 文件 */
-function MessageBody({ message }: { message: MessageRow }) {
+/** 单条消息正文：文本（含验证码复制 chip）/ 图片（点击应用内预览）/ 文件 */
+function MessageBody({ message, onPreviewImage }: { message: MessageRow; onPreviewImage: (url: string) => void }) {
   if (message.kind === 'image' && message.file) {
+    const url = `/api/files/${message.file.id}`
     return (
       // eslint-disable-next-line @next/next/no-img-element
-      <a href={`/api/files/${message.file.id}`} target="_blank" rel="noreferrer" className="block w-fit max-w-[320px]">
-        <img
-          src={`/api/files/${message.file.id}`}
-          alt={message.file.name}
-          className="max-h-80 w-auto max-w-full rounded-lg"
-        />
-      </a>
+      <button
+        type="button"
+        aria-label={`预览图片 ${message.file.name}`}
+        className="block w-fit cursor-zoom-in"
+        onClick={() => onPreviewImage(url)}
+      >
+        <img src={url} alt={message.file.name} className="max-h-80 w-auto max-w-full rounded-lg" />
+      </button>
     )
   }
   if (message.kind === 'file' && message.file) {
@@ -136,7 +139,7 @@ function MessageBody({ message }: { message: MessageRow }) {
         <button
           type="button"
           className="ml-2 inline-flex items-center rounded-full border border-primary/40 px-2.5 py-px align-middle text-xs font-medium text-primary transition-colors hover:bg-primary/10"
-          onClick={(e) => void copyCode(code, e.currentTarget.closest('.nw-message-text')?.parentElement ?? null)}
+          onClick={(e) => void copyCode(code, e.currentTarget.closest('.nw-message-text'))}
         >
           复制 {code}
         </button>
@@ -155,7 +158,7 @@ function DateDivider({ label }: { label: string }) {
   )
 }
 
-function MessageRowView({ message }: { message: MessageVM }) {
+function MessageRowView({ message, onPreviewImage }: { message: MessageVM; onPreviewImage: (url: string) => void }) {
   const hoverClock = (
     <div className="w-10 shrink-0 pt-0.5 text-right opacity-0 transition-opacity group-hover/row:opacity-100">
       <span className="text-[10px] text-muted-foreground">{formatClock(message.createdAt)}</span>
@@ -170,7 +173,7 @@ function MessageRowView({ message }: { message: MessageVM }) {
       >
         {hoverClock}
         <div className="min-w-0 flex-1">
-          <MessageBody message={message} />
+          <MessageBody message={message} onPreviewImage={onPreviewImage} />
         </div>
       </MessageScrollerItem>
     )
@@ -191,7 +194,7 @@ function MessageRowView({ message }: { message: MessageVM }) {
           <span className="text-[11px] text-muted-foreground">{formatTime(message.createdAt)}</span>
         </div>
         <div className="text-[15px]/relaxed">
-          <MessageBody message={message} />
+          <MessageBody message={message} onPreviewImage={onPreviewImage} />
         </div>
       </div>
     </MessageScrollerItem>
@@ -227,29 +230,43 @@ interface MessageListProps {
  */
 export function MessageList({ messages, loading, emptyContent, className }: MessageListProps) {
   const blocks = buildBlocks(messages)
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
 
   return (
-    <MessageScrollerProvider autoScroll defaultScrollPosition="end">
-      <MessageScroller className={cn('min-h-0 flex-1', className)}>
-        <MessageScrollerViewport aria-label="消息列表">
-          <MessageScrollerContent className="gap-0 pb-4">
-            {loading ? (
-              <LoadingSkeleton />
-            ) : blocks.length === 0 ? (
-              (emptyContent ?? null)
-            ) : (
-              blocks.map((block) =>
-                block.type === 'date' ? (
-                  <DateDivider key={block.key} label={block.label} />
-                ) : (
-                  <MessageRowView key={block.key} message={block.message} />
-                ),
-              )
-            )}
-          </MessageScrollerContent>
-          <MessageScrollerButton direction="end" />
-        </MessageScrollerViewport>
-      </MessageScroller>
-    </MessageScrollerProvider>
+    <>
+      <MessageScrollerProvider autoScroll defaultScrollPosition="end">
+        <MessageScroller className={cn('min-h-0 flex-1', className)}>
+          <MessageScrollerViewport aria-label="消息列表">
+            <MessageScrollerContent className="gap-0 pb-4">
+              {loading ? (
+                <LoadingSkeleton />
+              ) : blocks.length === 0 ? (
+                (emptyContent ?? null)
+              ) : (
+                blocks.map((block) =>
+                  block.type === 'date' ? (
+                    <DateDivider key={block.key} label={block.label} />
+                  ) : (
+                    <MessageRowView key={block.key} message={block.message} onPreviewImage={setPreviewUrl} />
+                  ),
+                )
+              )}
+            </MessageScrollerContent>
+            <MessageScrollerButton direction="end" />
+          </MessageScrollerViewport>
+        </MessageScroller>
+      </MessageScrollerProvider>
+
+      {/* 图片应用内预览：覆盖在消息流之上的灯箱 */}
+      <Dialog open={previewUrl !== null} onOpenChange={(open) => !open && setPreviewUrl(null)}>
+        <DialogContent className="max-w-3xl border-none bg-transparent p-0 [&>button]:-top-2 [&>button]:right-0 [&>button]:rounded-full [&>button]:bg-black/60">
+          <DialogTitle className="sr-only">图片预览</DialogTitle>
+          {previewUrl && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={previewUrl} alt="图片预览" className="max-h-[80vh] w-full rounded-lg object-contain" />
+          )}
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }

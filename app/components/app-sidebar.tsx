@@ -8,7 +8,7 @@ import { Button } from '@components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@components/ui/tooltip'
 import { UserAvatar } from './user-avatar'
 import { cn } from '@lib/utils'
-import { messagePreview } from '../message-view'
+import { conversationName, messagePreview } from '../message-view'
 import type { ConversationSummary, Peer, RoomInfo } from '../types'
 
 interface AppSidebarProps {
@@ -106,7 +106,7 @@ export function AppSidebar({
           <EmptyHint text="暂无私信，从下方在线节点发起" />
         ) : (
           directChats.map((conv) => {
-            const name = conv.peer?.name ?? '未知节点'
+            const name = conversationName(conv)
             const preview = messagePreview(conv.lastMessage)
             return (
               <button
@@ -151,7 +151,7 @@ export function AppSidebar({
         ) : (
           <>
             {joinedRooms.map((conv) => {
-              const name = conv.room?.name ?? '未知房间'
+              const name = conversationName(conv)
               return (
                 <button
                   key={conv.id}
@@ -187,7 +187,7 @@ export function AppSidebar({
 
         <SectionHeader title="在线节点" />
         {startablePeers.length === 0 ? (
-          <EmptyHint text="等待其他设备加入…" />
+          <EmptyHint text="等待其他节点加入…" />
         ) : (
           startablePeers.map((peer) => (
             <button

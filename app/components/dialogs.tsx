@@ -82,7 +82,7 @@ export function QrDialog({ visible, onOpenChange, centerInfo }: QrDialogProps) {
         <DialogHeader>
           <DialogTitle>手机扫码加入</DialogTitle>
           <DialogDescription>
-            同一局域网内的设备扫码即可直接进入，无需安装与登录。
+            同一局域网内的节点扫码即可直接进入，无需安装与登录。
           </DialogDescription>
         </DialogHeader>
         {centerInfo && (

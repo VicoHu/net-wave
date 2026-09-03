@@ -5,7 +5,7 @@ import { avatarColor } from '../message-view'
 
 interface UserAvatarProps {
   name: string
-  /** 在线状态点（在线节点 / 用户面板使用） */
+  /** 在线状态点（在线节点 / 底部节点面板使用） */
   online?: boolean
   /** 状态点描边颜色需与所在面板底色一致，默认 sidebar */
   dotClassName?: string
