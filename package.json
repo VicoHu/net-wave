@@ -1,0 +1,42 @@
+{
+  "name": "net-wave",
+  "version": "0.1.0",
+  "description": "",
+  "scripts": {
+    "dev": "tsx watch server.ts",
+    "build": "next build",
+    "start": "next build && tsx server.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.34.5",
+  "private": true,
+  "dependencies": {
+    "@douyinfe/semi-icons": "^2.103.0",
+    "@douyinfe/semi-ui": "^2.103.0",
+    "better-sqlite3": "^13.0.3",
+    "next": "^15.5.25",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "ws": "^8.21.3"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/node": "^26.4.1",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.7",
+    "@types/ws": "^8.18.1",
+    "tsx": "^4.23.13",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "better-sqlite3"
+    ]
+  },
+  "type": "module"
+}

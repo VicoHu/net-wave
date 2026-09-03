@@ -1,0 +1,8 @@
+/* Semi 全量样式：包 exports 未暴露 dist/css 子路径，走相对路径引入 */
+@import '../node_modules/@douyinfe/semi-ui/dist/css/semi.min.css';
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
