@@ -1,7 +1,7 @@
-import type { WebSocket, WebSocketServer } from 'ws'
+import type { WebSocket } from 'ws'
 import { getPeers, type Peer } from './peers'
 
-export interface OnlinePeer extends Peer {
+interface OnlinePeer extends Peer {
   connections: number
 }
 
@@ -11,22 +11,27 @@ export interface OnlinePeer extends Peer {
  * 不同模块系统）拿到同一实例。
  */
 export interface Hub {
-  wss: WebSocketServer | null
   add(ws: WebSocket, peerId: string): void
   remove(ws: WebSocket): void
   broadcast(type: string, payload: Record<string, unknown>): void
   sendToPeer(peerId: string, type: string, payload: Record<string, unknown>): void
   notifyPresenceChanged(): void
-  onlinePeers(): OnlinePeer[]
 }
 
 function createHub(): Hub {
-  const wss: WebSocketServer | null = null
   // 每个连接记录其节点身份；同节点多标签页为多条连接
   const connections = new Map<WebSocket, string>()
 
+  /** 在线节点及其连接数（重连/多标签页时 connections > 1） */
+  function peersWithConnections(): OnlinePeer[] {
+    const counts = new Map<string, number>()
+    for (const peerId of connections.values()) {
+      counts.set(peerId, (counts.get(peerId) ?? 0) + 1)
+    }
+    return getPeers([...counts.keys()]).map((p) => ({ ...p, connections: counts.get(p.id) ?? 0 }))
+  }
+
   const hub: Hub = {
-    wss,
     add(ws, peerId) {
       connections.set(ws, peerId)
       hub.notifyPresenceChanged()
@@ -35,33 +40,20 @@ function createHub(): Hub {
       connections.delete(ws)
       hub.notifyPresenceChanged()
     },
-    broadcast(type: string, payload: Record<string, unknown>) {
+    broadcast(type, payload) {
       const data = JSON.stringify({ type, ...payload })
       for (const ws of connections.keys()) {
         if (ws.readyState === ws.OPEN) ws.send(data)
       }
     },
-    sendToPeer(peerId: string, type: string, payload: Record<string, unknown>) {
+    sendToPeer(peerId, type, payload) {
       const data = JSON.stringify({ type, ...payload })
       for (const [ws, id] of connections) {
         if (id === peerId && ws.readyState === ws.OPEN) ws.send(data)
       }
     },
     notifyPresenceChanged() {
-      const counts = new Map<string, number>()
-      for (const peerId of connections.values()) {
-        counts.set(peerId, (counts.get(peerId) ?? 0) + 1)
-      }
-      const peers = getPeers([...counts.keys()])
-      const online = peers.map((p) => ({ ...p, connections: counts.get(p.id) ?? 0 }))
-      hub.broadcast('presence', { peers: online })
-    },
-    onlinePeers() {
-      const counts = new Map<string, number>()
-      for (const peerId of connections.values()) {
-        counts.set(peerId, (counts.get(peerId) ?? 0) + 1)
-      }
-      return getPeers([...counts.keys()]).map((p) => ({ ...p, connections: counts.get(p.id) ?? 0 }))
+      hub.broadcast('presence', { peers: peersWithConnections() })
     },
   }
   return hub

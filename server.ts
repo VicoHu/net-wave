@@ -24,7 +24,6 @@ const server = createServer((req, res) => {
 })
 
 const wss = new WebSocketServer({ noServer: true })
-hub.wss = wss
 
 function parseCookie(header: string | undefined): Record<string, string> {
   const result: Record<string, string> = {}

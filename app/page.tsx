@@ -86,6 +86,16 @@ export default function Home() {
     setLoadingMessages(false)
   }, [])
 
+  /** 重新拉取当前打开会话的消息（离线补投递：断线重连后新消息自动出现） */
+  const refreshActiveMessages = useCallback(async () => {
+    const current = activeIdRef.current
+    if (current == null) return
+    const res = await fetch(`/api/conversations/${current}/messages`)
+    if (!res.ok) return
+    const body = (await res.json()) as { messages: MessageRow[] }
+    setMessages(body.messages)
+  }, [])
+
   const connectWs = useCallback(() => {
     const protocol = location.protocol === 'https:' ? 'wss' : 'ws'
     const ws = new WebSocket(`${protocol}://${location.host}/ws`)
@@ -102,12 +112,13 @@ export default function Home() {
         void loadConversations()
       } else if (data.type === 'conversations-updated') {
         void loadConversations()
+        void refreshActiveMessages()
       }
     }
     ws.onclose = () => {
       setTimeout(connectWs, 3000)
     }
-  }, [loadConversations])
+  }, [loadConversations, refreshActiveMessages])
 
   useEffect(() => {
     void (async () => {
