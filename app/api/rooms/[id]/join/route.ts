@@ -1,13 +1,11 @@
 import { NextResponse } from 'next/server'
-import { cookies } from 'next/headers'
 import { getHub } from '@/hub'
+import { requirePeerId } from '@/api-auth'
 import { joinRoom } from '@/rooms'
-import { findPeer } from '@/peers'
 
 export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const jar = await cookies()
-  const peerId = jar.get('nw_peer')?.value
-  if (!peerId || !findPeer(peerId)) {
+  const peerId = await requirePeerId()
+  if (!peerId) {
     return NextResponse.json({ error: '未识别的节点身份' }, { status: 401 })
   }
 

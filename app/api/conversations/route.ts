@@ -1,14 +1,7 @@
 import { NextResponse } from 'next/server'
-import { cookies } from 'next/headers'
+import { requirePeerId } from '@/api-auth'
 import { createOrGetConversation, listConversations } from '@/chat'
 import { findPeer } from '@/peers'
-
-async function requirePeerId(): Promise<string | null> {
-  const jar = await cookies()
-  const peerId = jar.get('nw_peer')?.value
-  if (!peerId || !findPeer(peerId)) return null
-  return peerId
-}
 
 export async function GET() {
   const peerId = await requirePeerId()

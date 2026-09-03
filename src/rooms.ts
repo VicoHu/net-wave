@@ -38,7 +38,7 @@ export function listRooms(): RoomInfo[] {
   return rows
 }
 
-export function findRoom(roomId: number): RoomInfo | null {
+function findRoom(roomId: number): RoomInfo | null {
   const db = openDb()
   const row = db
     .prepare(`

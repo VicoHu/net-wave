@@ -1,10 +1,9 @@
 import busboy from 'busboy'
 import { NextResponse } from 'next/server'
-import { cookies } from 'next/headers'
 import { Readable } from 'node:stream'
 import type { ReadableStream as NodeWebReadableStream } from 'node:stream/web'
+import { requirePeerId } from '@/api-auth'
 import { saveFileStream } from '@/files'
-import { findPeer } from '@/peers'
 
 /** 去路径、控制字符与过长部分，避免落库异常文件名 */
 function sanitizeFilename(raw: string): string {
@@ -14,9 +13,8 @@ function sanitizeFilename(raw: string): string {
 }
 
 export async function POST(request: Request) {
-  const jar = await cookies()
-  const peerId = jar.get('nw_peer')?.value
-  if (!peerId || !findPeer(peerId)) {
+  const peerId = await requirePeerId()
+  if (!peerId) {
     return NextResponse.json({ error: '未识别的节点身份' }, { status: 401 })
   }
 

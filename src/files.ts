@@ -16,11 +16,16 @@ export interface FileMeta {
   deleted: boolean
 }
 
+/** 消息与文件统一的类型推导：图片内联展示，其余按文件卡片呈现 */
+export function fileKind(mime: string): FileMeta['kind'] {
+  return mime.startsWith('image/') ? 'image' : 'file'
+}
+
 function filesRoot(): string {
   return join(process.env.DATA_DIR ?? './data', 'files')
 }
 
-export function filePath(id: string): string {
+function filePath(id: string): string {
   // id 由中心生成的 UUID，不接受调用方拼接路径
   return join(filesRoot(), id)
 }
@@ -32,7 +37,7 @@ function rowToMeta(row: Record<string, unknown>): FileMeta {
     name: row.name as string,
     size: row.size as number,
     mime,
-    kind: mime.startsWith('image/') ? 'image' : 'file',
+    kind: fileKind(mime),
     uploadedBy: row.uploaded_by as string,
     createdAt: row.created_at as number,
     deleted: row.deleted_at != null,
@@ -55,7 +60,7 @@ export async function saveFileStream(source: Readable, name: string, mime: strin
   const createdAt = Date.now()
   const db = openDb()
   db.prepare('INSERT INTO files (id, name, size, mime, uploaded_by, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(id, name, size, mime, uploadedBy, createdAt)
-  return { id, name, size, mime, kind: mime.startsWith('image/') ? 'image' : 'file', uploadedBy, createdAt, deleted: false }
+  return { id, name, size, mime, kind: fileKind(mime), uploadedBy, createdAt, deleted: false }
 }
 
 export function findFile(id: string): FileMeta | null {

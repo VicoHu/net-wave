@@ -82,9 +82,9 @@ describe('多人房间', () => {
     expect(tooLong.status).toBe(400)
   })
 
-  it('三人群聊：加入后消息全员实时到达', async () => {
+  it('三人房间：加入后消息全员实时到达', async () => {
     const owner = await createPeer(app.baseUrl)
-    const room = await createRoom(owner, '三人群')
+    const room = await createRoom(owner, '三人房间')
     const p2 = await createPeer(app.baseUrl)
     const p3 = await createPeer(app.baseUrl)
     await joinRoom(p2, room.id)
@@ -156,10 +156,10 @@ describe('多人房间', () => {
     })
     expect(convRes.status).toBe(200)
     // 房间 + 一条消息
-    const room = await createRoom(owner, '混合列表群')
+    const room = await createRoom(owner, '混合列表房间')
     const wsOwner = await connectWs(app, owner)
     await wsOwner.wait('presence')
-    sendWs(wsOwner.ws, { type: 'send-message', conversationId: room.conversationId, text: '群里第一条' })
+    sendWs(wsOwner.ws, { type: 'send-message', conversationId: room.conversationId, text: '房间里第一条' })
     await wsOwner.wait('message')
     wsOwner.ws.close()
 
@@ -168,9 +168,9 @@ describe('多人房间', () => {
     const direct = conversations.find((c) => c.type === 'direct')
     expect(direct?.peer?.id).toBe(other)
     const roomConv = conversations.find((c) => c.type === 'room')
-    expect(roomConv?.room?.name).toBe('混合列表群')
+    expect(roomConv?.room?.name).toBe('混合列表房间')
     expect(roomConv?.room?.memberCount).toBe(1)
-    expect(roomConv?.lastMessage?.text).toBe('群里第一条')
+    expect(roomConv?.lastMessage?.text).toBe('房间里第一条')
   })
 
   it('房间事件：建房与加入时在线节点收到 rooms-updated', async () => {
@@ -178,7 +178,7 @@ describe('多人房间', () => {
     await watcher.wait('presence')
 
     const creator = await createPeer(app.baseUrl)
-    const room = await createRoom(creator, '广播测试群')
+    const room = await createRoom(creator, '广播测试房间')
     await watcher.wait('rooms-updated')
 
     const joiner = await createPeer(app.baseUrl)
@@ -190,14 +190,25 @@ describe('多人房间', () => {
     watcher.ws.close()
   })
 
-  it('持久化：重启后房间列表、成员与历史完整', async () => {
+  it('持久化：重启后房间列表、成员与历史完整（含文件消息）', async () => {
     const owner = await createPeer(app.baseUrl)
-    const room = await createRoom(owner, '重启群')
+    const room = await createRoom(owner, '重启房间')
     const member = await createPeer(app.baseUrl)
     await joinRoom(member, room.id)
     const m = await connectWs(app, member)
     await m.wait('presence')
     sendWs(m.ws, { type: 'send-message', conversationId: room.conversationId, text: '重启前的房间消息' })
+    await m.wait('message')
+    // 房间内发文件：图片与文件消息与私聊共用同一通道，重启后元数据完整
+    const form = new FormData()
+    form.append('file', new Blob([new Uint8Array([1, 2, 3, 4])], { type: 'image/png' }), '房间截图.png')
+    const uploadRes = await fetch(`${app.baseUrl}/api/files`, {
+      method: 'POST',
+      body: form,
+      headers: { Cookie: `nw_peer=${member}` },
+    })
+    const { fileId } = (await uploadRes.json()) as { fileId: string }
+    sendWs(m.ws, { type: 'send-message', conversationId: room.conversationId, fileId })
     await m.wait('message')
     m.ws.close()
     await app.stop()
@@ -209,7 +220,9 @@ describe('多人房间', () => {
     const res = await fetch(`${app.baseUrl}/api/conversations/${room.conversationId}/messages`, {
       headers: { Cookie: `nw_peer=${member}` },
     })
-    const body = (await res.json()) as { messages: { text: string | null }[] }
+    const body = (await res.json()) as { messages: { text: string | null; kind: string; file: { name: string } | null }[] }
     expect(body.messages.map((msg) => msg.text)).toContain('重启前的房间消息')
+    const imageMessage = body.messages.find((msg) => msg.kind === 'image')
+    expect(imageMessage?.file?.name).toBe('房间截图.png')
   })
 })

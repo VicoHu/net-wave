@@ -1,14 +1,12 @@
 import { NextResponse } from 'next/server'
-import { cookies } from 'next/headers'
-import { canAccessConversation, findConversation } from '@/chat'
+import { requirePeerId } from '@/api-auth'
+import { canAccessConversation, findConversationOfFile } from '@/chat'
 import { deleteFile, findFile, readFileStream } from '@/files'
-import { findPeer } from '@/peers'
-import { openDb } from '@/db'
+import { getHub } from '@/hub'
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const jar = await cookies()
-  const peerId = jar.get('nw_peer')?.value
-  if (!peerId || !findPeer(peerId)) {
+  const peerId = await requirePeerId()
+  if (!peerId) {
     return NextResponse.json({ error: '未识别的节点身份' }, { status: 401 })
   }
 
@@ -22,11 +20,9 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   }
 
   // 已进入会话的文件按会话可见性校验；尚未随消息发送的文件仅上传者可访问
-  const db = openDb()
-  const ref = db.prepare('SELECT conversation_id FROM messages WHERE file_id = ? LIMIT 1').get(id) as { conversation_id: number } | undefined
-  if (ref) {
-    const conversation = findConversation(ref.conversation_id)
-    if (!conversation || !canAccessConversation(conversation, peerId)) {
+  const conversation = findConversationOfFile(file.id)
+  if (conversation) {
+    if (!canAccessConversation(conversation, peerId)) {
       return NextResponse.json({ error: '无权访问该文件' }, { status: 403 })
     }
   } else if (file.uploadedBy !== peerId) {
@@ -46,9 +42,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
 
 /** 存储管理：删除落盘文件并标记元数据；历史消息保留但下载入口失效 */
 export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const jar = await cookies()
-  const peerId = jar.get('nw_peer')?.value
-  if (!peerId || !findPeer(peerId)) {
+  const peerId = await requirePeerId()
+  if (!peerId) {
     return NextResponse.json({ error: '未识别的节点身份' }, { status: 401 })
   }
 
@@ -56,5 +51,7 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
   if (!deleteFile(id)) {
     return NextResponse.json({ error: '文件不存在' }, { status: 404 })
   }
+  // 在线节点重拉历史，消息卡片即时呈现「已删除」标记
+  getHub().broadcast('conversations-updated', {})
   return NextResponse.json({ ok: true })
 }

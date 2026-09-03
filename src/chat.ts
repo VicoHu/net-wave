@@ -1,7 +1,10 @@
 import { openDb } from './db'
-import { findFile, type FileMeta } from './files'
+import { fileKind, findFile, type FileMeta } from './files'
 import { findPeer, type Peer } from './peers'
 import { isRoomMember } from './rooms'
+
+/** 节点已注销/不存在时的统一占位昵称 */
+const DEPARTED_PEER_NAME = '已离开的节点'
 
 export interface Conversation {
   id: number
@@ -20,7 +23,7 @@ export interface MessageRow {
   kind: 'text' | 'image' | 'file'
   text: string | null
   fileId: string | null
-  file: Omit<FileMeta, 'uploadedBy'> | null
+  file: FileMeta | null
   createdAt: number
 }
 
@@ -68,7 +71,16 @@ export function findConversation(id: number): Conversation | null {
   return row ? rowToConversation(row) : null
 }
 
-export function isParticipant(conversation: Conversation, peerId: string): boolean {
+/** 随消息进入会话的文件：定位其所属会话（文件下载的可见性校验用） */
+export function findConversationOfFile(fileId: string): Conversation | null {
+  const db = openDb()
+  const row = db.prepare('SELECT conversation_id FROM messages WHERE file_id = ? LIMIT 1').get(fileId) as
+    | { conversation_id: number }
+    | undefined
+  return row ? findConversation(row.conversation_id) : null
+}
+
+function isParticipant(conversation: Conversation, peerId: string): boolean {
   return conversation.peerA === peerId || conversation.peerB === peerId
 }
 
@@ -89,7 +101,7 @@ export function otherPeerOf(conversation: Conversation, peerId: string): string 
 /** 消息统一带文件元数据（LEFT JOIN：文件被删除后仍保留标记为不可下载的元数据）与发送者昵称 */
 const MESSAGE_SELECT = `
   SELECT m.id, m.conversation_id, m.sender_id, m.kind, m.text, m.created_at, m.file_id,
-         f.id AS f_id, f.name AS f_name, f.size AS f_size, f.mime AS f_mime,
+         f.id AS f_id, f.name AS f_name, f.size AS f_size, f.mime AS f_mime, f.uploaded_by AS f_uploaded_by,
          f.created_at AS f_created_at, f.deleted_at AS f_deleted_at,
          p.name AS sender_name
   FROM messages m
@@ -105,7 +117,8 @@ function rowToMessage(row: Record<string, unknown>): MessageRow {
           name: row.f_name as string,
           size: row.f_size as number,
           mime: row.f_mime as string,
-          kind: ((row.f_mime as string).startsWith('image/') ? 'image' : 'file') as FileMeta['kind'],
+          kind: fileKind(row.f_mime as string),
+          uploadedBy: (row.f_uploaded_by as string | null) ?? '',
           createdAt: row.f_created_at as number,
           deleted: row.f_deleted_at != null,
         }
@@ -114,7 +127,7 @@ function rowToMessage(row: Record<string, unknown>): MessageRow {
     id: row.id as number,
     conversationId: row.conversation_id as number,
     senderId: row.sender_id as string,
-    senderName: (row.sender_name as string | null) ?? '已离开的节点',
+    senderName: (row.sender_name as string | null) ?? DEPARTED_PEER_NAME,
     kind: row.kind as MessageRow['kind'],
     text: (row.text as string | null) ?? null,
     fileId: (row.file_id as string | null) ?? null,
@@ -141,7 +154,7 @@ export function listConversations(peerId: string): ConversationSummary[] {
     return {
       ...conv,
       type: 'direct',
-      peer: findPeer(otherId) ?? { id: otherId, name: '已离开的节点' },
+      peer: findPeer(otherId) ?? { id: otherId, name: DEPARTED_PEER_NAME },
       lastMessage: lastOf(conv.id),
     }
   })
@@ -185,7 +198,7 @@ export function addMessage(conversationId: number, senderId: string, text: strin
     id: Number(result.lastInsertRowid),
     conversationId,
     senderId,
-    senderName: findPeer(senderId)?.name ?? '已离开的节点',
+    senderName: findPeer(senderId)?.name ?? DEPARTED_PEER_NAME,
     kind: 'text',
     text,
     fileId: null,
@@ -207,7 +220,7 @@ export function addFileMessage(conversationId: number, senderId: string, fileId:
     id: Number(result.lastInsertRowid),
     conversationId,
     senderId,
-    senderName: findPeer(senderId)?.name ?? '已离开的节点',
+    senderName: findPeer(senderId)?.name ?? DEPARTED_PEER_NAME,
     kind: file.kind,
     text: null,
     fileId,

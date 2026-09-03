@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import type { ChatBoxRenderConfig, Message } from '@douyinfe/semi-ui/lib/es/chat/interface'
 import { Avatar, Button, Chat, Empty, Image, Input, List, Modal, Spin, Tag, Toast, Typography } from '@douyinfe/semi-ui'
 import { IconDownload, IconEdit, IconFile, IconPlus, IconQrCode, IconServer, IconWifi } from '@douyinfe/semi-icons'
+import { formatSize } from './format'
 
 interface Peer {
   id: string
@@ -57,13 +58,6 @@ interface CenterInfo {
 function extractCode(text: string): string | null {
   const match = text.match(/\d{4,8}/)
   return match?.[0] ?? null
-}
-
-function formatSize(size: number): string {
-  if (size >= 1024 ** 3) return `${(size / 1024 ** 3).toFixed(2)} GB`
-  if (size >= 1024 ** 2) return `${(size / 1024 ** 2).toFixed(1)} MB`
-  if (size >= 1024) return `${(size / 1024).toFixed(1)} KB`
-  return `${size} B`
 }
 
 /** 会话列表预览文案：文件类消息显示类型前缀 */

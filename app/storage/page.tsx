@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Avatar, Button, Empty, Popconfirm, Table, Tag, Toast, Typography } from '@douyinfe/semi-ui'
 import { IconServer, IconDelete } from '@douyinfe/semi-icons'
+import { formatSize } from '../format'
 
 interface StorageFile {
   id: string
@@ -11,13 +12,6 @@ interface StorageFile {
   mime: string
   kind: 'image' | 'file'
   createdAt: number
-}
-
-function formatSize(size: number): string {
-  if (size >= 1024 ** 3) return `${(size / 1024 ** 3).toFixed(2)} GB`
-  if (size >= 1024 ** 2) return `${(size / 1024 ** 2).toFixed(1)} MB`
-  if (size >= 1024) return `${(size / 1024).toFixed(1)} KB`
-  return `${size} B`
 }
 
 export default function StoragePage() {
