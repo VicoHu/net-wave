@@ -108,8 +108,8 @@ function FileCard({ file }: { file: FileMeta }) {
         alignItems: 'center',
         gap: 12,
         padding: '10px 14px',
-        border: '1px solid var(--semi-color-border)',
-        borderRadius: 8,
+        border: '1px solid var(--nw-hairline)',
+        borderRadius: 12,
         minWidth: 220,
       }}
     >
@@ -117,7 +117,7 @@ function FileCard({ file }: { file: FileMeta }) {
         style={{
           width: 40,
           height: 40,
-          borderRadius: 8,
+          borderRadius: 12,
           background: 'var(--semi-color-primary-light-default)',
           display: 'flex',
           alignItems: 'center',
@@ -445,7 +445,7 @@ function HomeInner() {
             src={image.image_url.url}
             alt={(message?.nwFile as FileMeta | undefined)?.name ?? '图片消息'}
             width={240}
-            style={{ borderRadius: 8, maxWidth: '100%' }}
+            style={{ borderRadius: 12, maxWidth: '100%' }}
           />
         )
       }
@@ -460,7 +460,7 @@ function HomeInner() {
             <Button
               size="small"
               theme="borderless"
-              style={{ marginLeft: 8, verticalAlign: 'middle' }}
+              className="nw-code-chip"
               onClick={(e) => void copyCode(code, (e.currentTarget.closest('.nw-message-text') as HTMLElement) ?? null)}
             >
               复制 {code}
@@ -505,15 +505,14 @@ function HomeInner() {
   const showChat = !isMobile || activeId !== null
 
   return (
-    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--semi-color-bg-0)' }}>
+    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: 'transparent' }}>
       <header
+        className="nw-header"
         style={{
           display: 'flex',
           alignItems: 'center',
           gap: 12,
           padding: '12px 20px',
-          background: 'var(--semi-color-bg-1)',
-          borderBottom: '1px solid var(--semi-color-border)',
           flexShrink: 0,
         }}
       >
@@ -522,8 +521,23 @@ function HomeInner() {
             返回
           </Button>
         )}
-        <IconWifi size="large" />
-        <Typography.Title heading={5} style={{ margin: 0 }}>
+        <span
+          aria-hidden
+          style={{
+            width: 28,
+            height: 28,
+            borderRadius: '50%',
+            background: 'linear-gradient(135deg, #5865f2 0%, #ec48bd 100%)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: '#fff',
+            flexShrink: 0,
+          }}
+        >
+          <IconWifi size="small" />
+        </span>
+        <Typography.Title heading={5} className="nw-header-title" style={{ margin: 0 }}>
           net-wave
         </Typography.Title>
         <div style={{ flex: 1 }} />
@@ -554,11 +568,11 @@ function HomeInner() {
       <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
         {showSidebar && (
           <aside
+            className="nw-aside"
             style={{
               width: isMobile ? '100%' : 280,
-              borderRight: isMobile ? 'none' : '1px solid var(--semi-color-border)',
+              borderRight: isMobile ? 'none' : '1px solid var(--nw-hairline)',
               overflowY: 'auto',
-              background: 'var(--semi-color-bg-1)',
               padding: 12,
               boxSizing: 'border-box',
             }}
@@ -574,19 +588,16 @@ function HomeInner() {
               emptyContent={<Empty description="暂无会话，从下方房间或在线节点开始" />}
               renderItem={(conv) => (
                 <List.Item
-                  style={{
-                    cursor: 'pointer',
-                    borderRadius: 8,
-                    background: conv.id === activeId ? 'var(--semi-color-primary-light-default)' : undefined,
-                  }}
+                  className={`nw-row${conv.id === activeId ? ' nw-row--active' : ''}`}
+                  style={{ marginBottom: 2 }}
                   main={
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%' }} onClick={() => void openConversation(conv.id)}>
                       {conv.type === 'room' ? (
-                        <Avatar size="small" color="violet" style={{ flexShrink: 0 }}>
+                        <Avatar size="small" color="pink" style={{ flexShrink: 0 }}>
                           {conv.room?.name.slice(0, 1)}
                         </Avatar>
                       ) : (
-                        <Avatar size="small" color="blue" style={{ flexShrink: 0 }}>
+                        <Avatar size="small" color="indigo" style={{ flexShrink: 0 }}>
                           {conv.peer?.name.slice(-1)}
                         </Avatar>
                       )}
@@ -596,7 +607,7 @@ function HomeInner() {
                             {conv.type === 'room' ? conv.room?.name : conv.peer?.name}
                           </span>
                           {conv.type === 'room' && (
-                            <Tag size="small" color="violet">
+                            <Tag size="small" color="pink">
                               {conv.room?.memberCount} 人
                             </Tag>
                           )}
@@ -619,10 +630,11 @@ function HomeInner() {
               emptyContent={<Typography.Text type="tertiary" size="small">暂无可加入的公开房间</Typography.Text>}
               renderItem={(room) => (
                 <List.Item
-                  style={{ cursor: 'pointer', borderRadius: 8 }}
+                  className="nw-row"
+                  style={{ marginBottom: 2 }}
                   main={
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }} onClick={() => void joinRoom(room.id)}>
-                      <Avatar size="small" color="violet" style={{ flexShrink: 0 }}>
+                      <Avatar size="small" color="pink" style={{ flexShrink: 0 }}>
                         {room.name.slice(0, 1)}
                       </Avatar>
                       <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{room.name}</span>
@@ -644,10 +656,11 @@ function HomeInner() {
               emptyContent={<Typography.Text type="tertiary" size="small">等待其他设备加入…</Typography.Text>}
               renderItem={(peer) => (
                 <List.Item
-                  style={{ cursor: 'pointer', borderRadius: 8 }}
+                  className="nw-row"
+                  style={{ marginBottom: 2 }}
                   main={
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }} onClick={() => void startConversationWith(peer.id)}>
-                      <Avatar size="small" color="green">
+                      <Avatar size="small" color="indigo">
                         {peer.name.slice(-1)}
                       </Avatar>
                       <span>{peer.name}</span>
@@ -665,10 +678,9 @@ function HomeInner() {
             {activeConversation ? (
               <>
                 <div
+                  className="nw-header nw-header--chat"
                   style={{
                     padding: '10px 20px',
-                    borderBottom: '1px solid var(--semi-color-border)',
-                    background: 'var(--semi-color-bg-1)',
                     display: 'flex',
                     alignItems: 'center',
                     gap: 10,
@@ -676,7 +688,7 @@ function HomeInner() {
                 >
                   {activeConversation.type === 'room' ? (
                     <>
-                      <Avatar size="extra-small" color="violet">
+                      <Avatar size="extra-small" color="pink">
                         {activeConversation.room?.name.slice(0, 1)}
                       </Avatar>
                       <Typography.Text strong>{activeConversation.room?.name}</Typography.Text>
@@ -686,7 +698,7 @@ function HomeInner() {
                     </>
                   ) : (
                     <>
-                      <Avatar size="extra-small" color="blue">
+                      <Avatar size="extra-small" color="indigo">
                         {activeConversation.peer?.name.slice(-1)}
                       </Avatar>
                       <Typography.Text strong>{activeConversation.peer?.name}</Typography.Text>
@@ -705,17 +717,17 @@ function HomeInner() {
                     roleConfig={{
                       user: {
                         name: me?.name ?? '我',
-                        avatar: <Avatar color="amber">{me?.name.slice(-1) ?? '我'}</Avatar>,
+                        avatar: <Avatar color="light-blue">{me?.name.slice(-1) ?? '我'}</Avatar>,
                       },
                       assistant:
                         activeConversation.type === 'room'
                           ? {
                               name: activeConversation.room?.name ?? '房间',
-                              avatar: <Avatar color="violet">{activeConversation.room?.name.slice(0, 1) ?? '房'}</Avatar>,
+                              avatar: <Avatar color="pink">{activeConversation.room?.name.slice(0, 1) ?? '房'}</Avatar>,
                             }
                           : {
                               name: activeConversation.peer?.name ?? '对方',
-                              avatar: <Avatar color="blue">{activeConversation.peer?.name.slice(-1) ?? '?'}</Avatar>,
+                              avatar: <Avatar color="indigo">{activeConversation.peer?.name.slice(-1) ?? '?'}</Avatar>,
                             },
                     }}
                     chatBoxRenderConfig={chatBoxRenderConfig}
@@ -725,8 +737,10 @@ function HomeInner() {
                 </div>
               </>
             ) : (
-              <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Empty description="选择一个会话或从在线节点发起私聊" />
+              <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+                <div className="nw-empty-card">
+                  <Empty description="选择一个会话或从在线节点发起私聊" />
+                </div>
               </div>
             )}
             {loadingMessages && (

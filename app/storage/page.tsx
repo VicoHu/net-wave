@@ -47,23 +47,37 @@ export default function StoragePage() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--semi-color-bg-0)' }}>
+    <div style={{ minHeight: '100vh', background: 'transparent' }}>
       <header
+        className="nw-header"
         style={{
           display: 'flex',
           alignItems: 'center',
           gap: 12,
           padding: '12px 20px',
-          background: 'var(--semi-color-bg-1)',
-          borderBottom: '1px solid var(--semi-color-border)',
         }}
       >
-        <IconServer size="large" />
-        <Typography.Title heading={5} style={{ margin: 0 }}>
+        <span
+          aria-hidden
+          style={{
+            width: 28,
+            height: 28,
+            borderRadius: '50%',
+            background: 'linear-gradient(135deg, #5865f2 0%, #ec48bd 100%)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: '#fff',
+            flexShrink: 0,
+          }}
+        >
+          <IconServer size="small" />
+        </span>
+        <Typography.Title heading={5} className="nw-header-title" style={{ margin: 0 }}>
           存储管理
         </Typography.Title>
         <div style={{ flex: 1 }} />
-        <Tag color="blue" size="large">
+        <Tag color="indigo" size="large">
           总占用 {formatSize(totalSize)}
         </Tag>
         <Button onClick={() => history.back()}>返回</Button>
@@ -81,7 +95,7 @@ export default function StoragePage() {
               dataIndex: 'name',
               render: (name: string, row) => (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <Avatar size="extra-small" color={row.kind === 'image' ? 'green' : 'blue'}>
+                  <Avatar size="extra-small" color={row.kind === 'image' ? 'pink' : 'indigo'}>
                     {row.kind === 'image' ? '图' : '件'}
                   </Avatar>
                   <span style={{ wordBreak: 'break-all' }}>{name}</span>
