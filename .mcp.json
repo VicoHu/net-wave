@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "codegraph": {
+      "type": "stdio",
+      "command": "codegraph",
+      "args": [
+        "serve",
+        "--mcp"
+      ]
+    },
+    "semi-mcp": {
+      "command": "npx",
+      "args": ["-y", "@douyinfe/semi-mcp"]
+    }
+  }
+}
