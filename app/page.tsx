@@ -40,6 +40,56 @@ function useIsMobile() {
   return isMobile
 }
 
+const SIDEBAR_WIDTH_KEY = 'nw_sidebar_width'
+const SIDEBAR_WIDTH_MIN = 220
+const SIDEBAR_WIDTH_MAX = 400
+const SIDEBAR_WIDTH_DEFAULT = 280
+
+const clampWidth = (value: number) =>
+  Math.min(SIDEBAR_WIDTH_MAX, Math.max(SIDEBAR_WIDTH_MIN, value))
+
+/**
+ * 私信列表宽度：拖拽右侧分隔条调整（220-400px），持久化到 localStorage，
+ * 双击分隔条恢复默认。宽度为 null 表示尚未读到本地偏好，侧栏走默认样式。
+ */
+function useSidebarWidth() {
+  const [width, setWidth] = useState<number | null>(null)
+  const [resizing, setResizing] = useState(false)
+  const dragRef = useRef({ startX: 0, startWidth: 0 })
+
+  useEffect(() => {
+    const saved = Number(localStorage.getItem(SIDEBAR_WIDTH_KEY))
+    setWidth(
+      saved >= SIDEBAR_WIDTH_MIN && saved <= SIDEBAR_WIDTH_MAX ? saved : SIDEBAR_WIDTH_DEFAULT,
+    )
+  }, [])
+
+  const startResize = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    dragRef.current = { startX: e.clientX, startWidth: width ?? SIDEBAR_WIDTH_DEFAULT }
+    setResizing(true)
+    e.currentTarget.setPointerCapture(e.pointerId)
+  }
+
+  const resize = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!resizing) return
+    setWidth(clampWidth(dragRef.current.startWidth + e.clientX - dragRef.current.startX))
+  }
+
+  const endResize = () => {
+    if (!resizing) return
+    setResizing(false)
+    if (width != null) localStorage.setItem(SIDEBAR_WIDTH_KEY, String(width))
+  }
+
+  const resetWidth = () => {
+    setWidth(SIDEBAR_WIDTH_DEFAULT)
+    localStorage.setItem(SIDEBAR_WIDTH_KEY, String(SIDEBAR_WIDTH_DEFAULT))
+  }
+
+  return { width, resizing, startResize, resize, endResize, resetWidth }
+}
+
 export default function Home() {
   // useSearchParams 需 Suspense 包裹以满足 SSR 边界要求
   return (
@@ -67,6 +117,7 @@ function HomeInner() {
   const [filter, setFilter] = useState('')
   const [loadingMessages, setLoadingMessages] = useState(false)
   const [display, updateDisplay] = useDisplaySettings()
+  const sidebarWidth = useSidebarWidth()
   const wsRef = useRef<WebSocket | null>(null)
   const activeIdRef = useRef<number | null>(null)
   const meRef = useRef<Peer | null>(null)
@@ -284,11 +335,12 @@ function HomeInner() {
   const showChat = !isMobile || activeId !== null
 
   return (
-    <div className="flex h-dvh overflow-hidden">
+    <div className={cn('flex h-dvh overflow-hidden', sidebarWidth.resizing && 'select-none')}>
       <AppRail onCreateRoom={() => setRoomModalVisible(true)} />
 
       <div className={cn('flex min-w-0 flex-1 md:flex-none', !showList && 'hidden')}>
         <AppSidebar
+          width={isMobile ? undefined : (sidebarWidth.width ?? undefined)}
           me={me}
           conversations={conversations}
           rooms={rooms}
@@ -306,6 +358,21 @@ function HomeInner() {
           onDeleteRoom={(room) => setRoomToDelete(room)}
         />
       </div>
+
+      {/* 私信列表与聊天区的拖拽分隔条：仅桌面端显示 */}
+      <div
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="调整私信列表宽度"
+        className={cn(
+          'hidden w-1 shrink-0 cursor-col-resize touch-none bg-transparent transition-colors hover:bg-primary/40 md:block',
+          sidebarWidth.resizing && 'bg-primary/40',
+        )}
+        onPointerDown={sidebarWidth.startResize}
+        onPointerMove={sidebarWidth.resize}
+        onPointerUp={sidebarWidth.endResize}
+        onDoubleClick={sidebarWidth.resetWidth}
+      />
 
       <main className={cn('flex min-w-0 flex-1 flex-col', !showChat && 'hidden')}>
         {activeConversation ? (

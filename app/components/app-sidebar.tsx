@@ -12,6 +12,8 @@ import { conversationName, messagePreview } from '../message-view'
 import type { ConversationSummary, Peer, RoomInfo } from '../types'
 
 interface AppSidebarProps {
+  /** 桌面端侧栏宽度（px），由拖拽分隔条控制；缺省时使用默认宽度 md:w-[280px] */
+  width?: number
   me: Peer | null
   conversations: ConversationSummary[]
   rooms: RoomInfo[]
@@ -54,6 +56,7 @@ const rowClass = (active?: boolean) =>
   )
 
 export function AppSidebar({
+  width,
   me,
   conversations,
   rooms,
@@ -93,7 +96,10 @@ export function AppSidebar({
   }
 
   return (
-    <aside className="flex w-full min-w-0 flex-col bg-sidebar md:w-60 md:shrink-0">
+    <aside
+      className={cn('flex w-full min-w-0 flex-col bg-sidebar md:shrink-0', width == null && 'md:w-[280px]')}
+      style={width != null ? { width } : undefined}
+    >
       <div className="border-b border-white/[0.06] p-2.5">
         <Input
           value={filter}
@@ -228,7 +234,7 @@ export function AppSidebar({
         )}
       </div>
 
-      <div className="flex h-[52px] shrink-0 items-center gap-1.5 bg-rail px-2">
+      <div className="flex h-[52px] shrink-0 items-center gap-2 bg-rail px-2.5">
         <UserAvatar name={me?.name ?? '?'} online className="size-8" dotClassName="ring-rail" />
         {editingName !== null ? (
           <>
@@ -237,13 +243,13 @@ export function AppSidebar({
               value={editingName}
               maxLength={20}
               aria-label="编辑昵称"
-              className="h-7 rounded-md border-none bg-sidebar text-sm"
+              className="h-7 min-w-0 flex-1 rounded-md border-none bg-sidebar text-sm"
               onChange={(e) => setEditingName(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.nativeEvent.isComposing) saveRename()
               }}
             />
-            <Button variant="ghost" size="icon-sm" aria-label="保存昵称" onClick={saveRename}>
+            <Button variant="ghost" size="icon-xs" aria-label="保存昵称" onClick={saveRename}>
               <CheckIcon />
             </Button>
           </>
@@ -253,66 +259,68 @@ export function AppSidebar({
               <span className="block truncate text-sm font-semibold">{me?.name ?? '…'}</span>
               <span className="block text-xs text-online">在线</span>
             </span>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label="编辑昵称"
-                  className="text-muted-foreground hover:text-foreground"
-                  onClick={() => setEditingName(me?.name ?? '')}
-                >
-                  <PencilIcon />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>编辑昵称</TooltipContent>
-            </Tooltip>
+            <div className="flex shrink-0 items-center gap-0.5">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label="编辑昵称"
+                    className="text-muted-foreground hover:text-foreground"
+                    onClick={() => setEditingName(me?.name ?? '')}
+                  >
+                    <PencilIcon />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>编辑昵称</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label="设置"
+                    className="text-muted-foreground hover:text-foreground"
+                    onClick={onShowSettings}
+                  >
+                    <SettingsIcon />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>设置</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label="存储管理"
+                    className="text-muted-foreground hover:text-foreground"
+                    asChild
+                  >
+                    <Link href="/storage">
+                      <ServerIcon />
+                    </Link>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>存储管理</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label="扫码加入"
+                    className="text-muted-foreground hover:text-foreground"
+                    onClick={onShowQr}
+                  >
+                    <QrCodeIcon />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>扫码加入</TooltipContent>
+              </Tooltip>
+            </div>
           </>
         )}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              aria-label="设置"
-              className="text-muted-foreground hover:text-foreground"
-              onClick={onShowSettings}
-            >
-              <SettingsIcon />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>设置</TooltipContent>
-        </Tooltip>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              aria-label="存储管理"
-              className="text-muted-foreground hover:text-foreground"
-              asChild
-            >
-              <Link href="/storage">
-                <ServerIcon />
-              </Link>
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>存储管理</TooltipContent>
-        </Tooltip>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              aria-label="扫码加入"
-              className="text-muted-foreground hover:text-foreground"
-              onClick={onShowQr}
-            >
-              <QrCodeIcon />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>扫码加入</TooltipContent>
-        </Tooltip>
       </div>
     </aside>
   )
