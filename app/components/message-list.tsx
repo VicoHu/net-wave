@@ -13,6 +13,7 @@ import {
 } from '@components/ui/message-scroller'
 import { Button } from '@components/ui/button'
 import { Dialog, DialogContent, DialogTitle } from '@components/ui/dialog'
+import { Popover, PopoverContent, PopoverTrigger } from '@components/ui/popover'
 import { Skeleton } from '@components/ui/skeleton'
 import { UserAvatar } from './user-avatar'
 import { cn } from '@lib/utils'
@@ -26,6 +27,7 @@ import {
   type MessageRow,
   type MessageVM,
 } from '../message-view'
+import type { DisplaySettings } from './settings-dialog'
 
 /** 从文本中提取验证码：secure context 一键复制，否则降级为选中全文 */
 async function copyCode(code: string, container: HTMLElement | null) {
@@ -158,7 +160,15 @@ function DateDivider({ label }: { label: string }) {
   )
 }
 
-function MessageRowView({ message, onPreviewImage }: { message: MessageVM; onPreviewImage: (url: string) => void }) {
+function MessageRowView({
+  message,
+  display,
+  onPreviewImage,
+}: {
+  message: MessageVM
+  display: DisplaySettings
+  onPreviewImage: (url: string) => void
+}) {
   const hoverClock = (
     <div className="w-10 shrink-0 pt-0.5 text-right opacity-0 transition-opacity group-hover/row:opacity-100">
       <span className="text-[10px] text-muted-foreground">{formatClock(message.createdAt)}</span>
@@ -180,17 +190,54 @@ function MessageRowView({ message, onPreviewImage }: { message: MessageVM; onPre
   }
 
   const name = message.senderName || '未知节点'
+  const hasPopover = display.showIp || display.showMac
+  const avatar = (
+    <UserAvatar name={name} className="mt-0.5 size-10" dotClassName="ring-chat" />
+  )
   return (
     <MessageScrollerItem
       messageId={String(message.id)}
       className="group/row flex gap-4 px-4 pt-4 hover:bg-white/[0.03]"
     >
-      <UserAvatar name={name} className="mt-0.5 size-10" dotClassName="ring-chat" />
+      {hasPopover ? (
+        <Popover>
+          <PopoverTrigger asChild>
+            <button type="button" aria-label={`查看 ${name} 的资料`} className="cursor-pointer rounded-full outline-none">
+              {avatar}
+            </button>
+          </PopoverTrigger>
+          <PopoverContent align="start" className="w-64 p-0">
+            <div className="h-16" style={{ backgroundColor: avatarColor(name) }} />
+            <div className="flex flex-col gap-3 p-3">
+              <p className="text-sm font-semibold" style={{ color: avatarColor(name) }}>
+                {name}
+              </p>
+              {display.showIp && (
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-[11px] font-semibold tracking-wider text-muted-foreground">IP 地址</span>
+                  <span className="font-mono text-xs">{message.senderIp ?? '未知'}</span>
+                </div>
+              )}
+              {display.showMac && (
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-[11px] font-semibold tracking-wider text-muted-foreground">MAC 地址</span>
+                  <span className="font-mono text-xs">{message.senderMac ?? '未知'}</span>
+                </div>
+              )}
+            </div>
+          </PopoverContent>
+        </Popover>
+      ) : (
+        avatar
+      )}
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline gap-2">
           <span className="text-[15px] font-semibold" style={{ color: avatarColor(name) }}>
             {name}
           </span>
+          {display.showIp && message.senderIp && (
+            <span className="font-mono text-[11px] text-muted-foreground">{message.senderIp}</span>
+          )}
           <span className="text-[11px] text-muted-foreground">{formatTime(message.createdAt)}</span>
         </div>
         <div className="text-[15px]/relaxed">
@@ -222,13 +269,14 @@ interface MessageListProps {
   loading?: boolean
   emptyContent?: React.ReactNode
   className?: string
+  display: DisplaySettings
 }
 
 /**
  * Discord 式扁平消息流：日期分隔 + 同发送者折叠。
  * 滚动行为（贴底跟随、跳到最新）由 MessageScroller 原语负责。
  */
-export function MessageList({ messages, loading, emptyContent, className }: MessageListProps) {
+export function MessageList({ messages, loading, emptyContent, className, display }: MessageListProps) {
   const blocks = buildBlocks(messages)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
 
@@ -247,7 +295,7 @@ export function MessageList({ messages, loading, emptyContent, className }: Mess
                   block.type === 'date' ? (
                     <DateDivider key={block.key} label={block.label} />
                   ) : (
-                    <MessageRowView key={block.key} message={block.message} onPreviewImage={setPreviewUrl} />
+                    <MessageRowView key={block.key} message={block.message} display={display} onPreviewImage={setPreviewUrl} />
                   ),
                 )
               )}

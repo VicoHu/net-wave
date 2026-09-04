@@ -17,6 +17,8 @@ export interface MessageRow {
   conversationId: number
   senderId: string
   senderName: string
+  senderIp: string | null
+  senderMac: string | null
   kind: string
   text: string | null
   fileId: string | null

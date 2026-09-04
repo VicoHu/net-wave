@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { CheckIcon, HashIcon, PencilIcon, PlusIcon, QrCodeIcon, ServerIcon } from 'lucide-react'
+import { CheckIcon, HashIcon, PencilIcon, PlusIcon, QrCodeIcon, ServerIcon, SettingsIcon, TrashIcon } from 'lucide-react'
 import { Input } from '@components/ui/input'
 import { Button } from '@components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@components/ui/tooltip'
@@ -25,6 +25,8 @@ interface AppSidebarProps {
   onCreateRoom: () => void
   onRename: (name: string) => void
   onShowQr: () => void
+  onShowSettings: () => void
+  onDeleteRoom: (room: { id: number; name: string; conversationId: number }) => void
 }
 
 const matched = (name: string | undefined, filter: string) =>
@@ -65,6 +67,8 @@ export function AppSidebar({
   onCreateRoom,
   onRename,
   onShowQr,
+  onShowSettings,
+  onDeleteRoom,
 }: AppSidebarProps) {
   const [editingName, setEditingName] = useState<string | null>(null)
 
@@ -152,19 +156,40 @@ export function AppSidebar({
           <>
             {joinedRooms.map((conv) => {
               const name = conversationName(conv)
+              const owned = conv.room?.createdBy != null && conv.room.createdBy === me?.id
               return (
-                <button
-                  key={conv.id}
-                  type="button"
-                  className={rowClass(conv.id === activeId)}
-                  onClick={() => onOpenConversation(conv.id)}
-                >
-                  <HashIcon className="size-4 shrink-0 text-muted-foreground" />
-                  <span className="min-w-0 flex-1 truncate text-sm font-medium">{name}</span>
-                  <span className="shrink-0 text-xs text-muted-foreground">
-                    {conv.room?.memberCount} 人
-                  </span>
-                </button>
+                <div key={conv.id} className="group/room relative">
+                  <button
+                    type="button"
+                    className={cn(rowClass(conv.id === activeId), owned && 'pr-8')}
+                    onClick={() => onOpenConversation(conv.id)}
+                  >
+                    <HashIcon className="size-4 shrink-0 text-muted-foreground" />
+                    <span className="min-w-0 flex-1 truncate text-sm font-medium">{name}</span>
+                    <span className="shrink-0 text-xs text-muted-foreground">
+                      {conv.room?.memberCount} 人
+                    </span>
+                  </button>
+                  {owned && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon-xs"
+                          aria-label={`删除房间 ${name}`}
+                          className="absolute top-1/2 right-1 -translate-y-1/2 text-muted-foreground hover:text-destructive"
+                          onClick={() =>
+                            conv.room &&
+                            onDeleteRoom({ id: conv.room.id, name, conversationId: conv.id })
+                          }
+                        >
+                          <TrashIcon />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>删除房间</TooltipContent>
+                    </Tooltip>
+                  )}
+                </div>
               )
             })}
             {joinableRooms.map((room) => (
@@ -244,6 +269,20 @@ export function AppSidebar({
             </Tooltip>
           </>
         )}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label="设置"
+              className="text-muted-foreground hover:text-foreground"
+              onClick={onShowSettings}
+            >
+              <SettingsIcon />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>设置</TooltipContent>
+        </Tooltip>
         <Tooltip>
           <TooltipTrigger asChild>
             <Button

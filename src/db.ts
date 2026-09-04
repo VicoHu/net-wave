@@ -33,7 +33,12 @@ export function openDb(dataDir = process.env.DATA_DIR ?? './data'): Database.Dat
     CREATE TABLE IF NOT EXISTS rooms (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
+      created_by TEXT,
       created_at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
     );
     CREATE TABLE IF NOT EXISTS room_members (
       room_id INTEGER NOT NULL,
@@ -64,6 +69,18 @@ export function openDb(dataDir = process.env.DATA_DIR ?? './data'): Database.Dat
   const messageColumns = db.prepare('PRAGMA table_info(messages)').all() as { name: string }[]
   if (!messageColumns.some((c) => c.name === 'file_id')) {
     db.exec('ALTER TABLE messages ADD COLUMN file_id TEXT')
+  }
+  // 增量迁移：既有库的 rooms 增加 created_by（创建者可删除房间）
+  const roomColumns = db.prepare('PRAGMA table_info(rooms)').all() as { name: string }[]
+  if (!roomColumns.some((c) => c.name === 'created_by')) {
+    db.exec('ALTER TABLE rooms ADD COLUMN created_by TEXT')
+  }
+  // 增量迁移：既有库的 peers 增加 ip/mac（消息区展示节点网络信息）
+  const peerColumns = db.prepare('PRAGMA table_info(peers)').all() as { name: string }[]
+  for (const column of ['ip', 'mac']) {
+    if (!peerColumns.some((c) => c.name === column)) {
+      db.exec(`ALTER TABLE peers ADD COLUMN ${column} TEXT`)
+    }
   }
   // 增量迁移：conversations 增加 type/room_id（旧结构为 peer_a/peer_b NOT NULL，需重建表）
   const convColumns = db.prepare('PRAGMA table_info(conversations)').all() as { name: string }[]

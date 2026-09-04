@@ -6,6 +6,16 @@ import { ArrowLeftIcon, HashIcon, WavesIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@components/ui/button'
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@components/ui/empty'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@components/ui/alert-dialog'
 import { AppRail } from './components/app-rail'
 import { AppSidebar } from './components/app-sidebar'
 import { ChatInput } from './components/chat-input'
@@ -13,6 +23,7 @@ import { ConversationInfo } from './components/conversation-info'
 import { CreateRoomDialog, QrDialog } from './components/dialogs'
 import { MessageList } from './components/message-list'
 import { UserAvatar } from './components/user-avatar'
+import { SettingsDialog, useDisplaySettings } from './components/settings-dialog'
 import { cn } from '@lib/utils'
 import { conversationName, type MessageRow } from './message-view'
 import type { ConversationSummary, CenterInfo, Peer, RoomInfo } from './types'
@@ -51,8 +62,11 @@ function HomeInner() {
   const [centerInfo, setCenterInfo] = useState<CenterInfo | null>(null)
   const [qrVisible, setQrVisible] = useState(false)
   const [roomModalVisible, setRoomModalVisible] = useState(false)
+  const [settingsVisible, setSettingsVisible] = useState(false)
+  const [roomToDelete, setRoomToDelete] = useState<{ id: number; name: string; conversationId: number } | null>(null)
   const [filter, setFilter] = useState('')
   const [loadingMessages, setLoadingMessages] = useState(false)
+  const [display, updateDisplay] = useDisplaySettings()
   const wsRef = useRef<WebSocket | null>(null)
   const activeIdRef = useRef<number | null>(null)
   const meRef = useRef<Peer | null>(null)
@@ -232,6 +246,19 @@ function HomeInner() {
     openConversation(room.conversationId)
   }
 
+  const deleteRoom = async (room: { id: number; name: string; conversationId: number }) => {
+    const res = await fetch(`/api/rooms/${room.id}`, { method: 'DELETE' })
+    setRoomToDelete(null)
+    if (!res.ok) {
+      toast.error('删除房间失败（只有创建者可以删除）')
+      return
+    }
+    toast.success(`已删除房间 ${room.name}`)
+    await Promise.all([loadRooms(), loadConversations()])
+    // 正在浏览被删房间时退回会话列表
+    if (activeIdRef.current === room.conversationId) router.push('/')
+  }
+
   const rename = async (name: string) => {
     const trimmed = name.trim()
     if (!trimmed || !me) return
@@ -275,6 +302,8 @@ function HomeInner() {
           onCreateRoom={() => setRoomModalVisible(true)}
           onRename={(name) => void rename(name)}
           onShowQr={() => setQrVisible(true)}
+          onShowSettings={() => setSettingsVisible(true)}
+          onDeleteRoom={(room) => setRoomToDelete(room)}
         />
       </div>
 
@@ -314,6 +343,7 @@ function HomeInner() {
             <MessageList
               messages={messages}
               loading={loadingMessages}
+              display={display}
               emptyContent={
                 <div className="flex flex-1 items-center justify-center p-6 text-sm text-muted-foreground">
                   还没有消息，打个招呼吧
@@ -366,6 +396,31 @@ function HomeInner() {
         onSubmit={(name) => void createRoom(name)}
       />
       <QrDialog visible={qrVisible} onOpenChange={setQrVisible} centerInfo={centerInfo} />
+      <SettingsDialog
+        visible={settingsVisible}
+        onOpenChange={setSettingsVisible}
+        settings={display}
+        onChange={updateDisplay}
+      />
+      <AlertDialog open={roomToDelete !== null} onOpenChange={(open) => !open && setRoomToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>删除房间 #{roomToDelete?.name}？</AlertDialogTitle>
+            <AlertDialogDescription>
+              将同时删除全部成员的会话入口与历史消息，操作不可撤销。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              onClick={() => roomToDelete && void deleteRoom(roomToDelete)}
+            >
+              删除
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

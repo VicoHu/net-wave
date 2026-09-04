@@ -20,6 +20,8 @@ export interface MessageRow {
   conversationId: number
   senderId: string
   senderName: string
+  senderIp: string | null
+  senderMac: string | null
   kind: 'text' | 'image' | 'file'
   text: string | null
   fileId: string | null
@@ -37,7 +39,7 @@ export interface DirectSummary extends Conversation {
 /** 房间会话摘要（type=room） */
 export interface RoomSummary extends Conversation {
   type: 'room'
-  room: { id: number; name: string; memberCount: number }
+  room: { id: number; name: string; memberCount: number; createdBy: string | null }
   lastMessage: MessageRow | null
 }
 
@@ -98,12 +100,12 @@ export function otherPeerOf(conversation: Conversation, peerId: string): string 
   return null
 }
 
-/** 消息统一带文件元数据（LEFT JOIN：文件被删除后仍保留标记为不可下载的元数据）与发送者昵称 */
+/** 消息统一带文件元数据（LEFT JOIN：文件被删除后仍保留标记为不可下载的元数据）与发送者昵称、网络信息 */
 const MESSAGE_SELECT = `
   SELECT m.id, m.conversation_id, m.sender_id, m.kind, m.text, m.created_at, m.file_id,
          f.id AS f_id, f.name AS f_name, f.size AS f_size, f.mime AS f_mime, f.uploaded_by AS f_uploaded_by,
          f.created_at AS f_created_at, f.deleted_at AS f_deleted_at,
-         p.name AS sender_name
+         p.name AS sender_name, p.ip AS sender_ip, p.mac AS sender_mac
   FROM messages m
   LEFT JOIN files f ON m.file_id = f.id
   LEFT JOIN peers p ON m.sender_id = p.id
@@ -128,6 +130,8 @@ function rowToMessage(row: Record<string, unknown>): MessageRow {
     conversationId: row.conversation_id as number,
     senderId: row.sender_id as string,
     senderName: (row.sender_name as string | null) ?? DEPARTED_PEER_NAME,
+    senderIp: (row.sender_ip as string | null) ?? null,
+    senderMac: (row.sender_mac as string | null) ?? null,
     kind: row.kind as MessageRow['kind'],
     text: (row.text as string | null) ?? null,
     fileId: (row.file_id as string | null) ?? null,
@@ -154,14 +158,14 @@ export function listConversations(peerId: string): ConversationSummary[] {
     return {
       ...conv,
       type: 'direct',
-      peer: findPeer(otherId) ?? { id: otherId, name: DEPARTED_PEER_NAME },
+      peer: findPeer(otherId) ?? { id: otherId, name: DEPARTED_PEER_NAME, ip: null, mac: null },
       lastMessage: lastOf(conv.id),
     }
   })
 
   const roomRows = db
     .prepare(`
-      SELECT c.*, r.name AS room_name,
+      SELECT c.*, r.name AS room_name, r.created_by AS room_created_by,
              (SELECT COUNT(*) FROM room_members m WHERE m.room_id = r.id) AS member_count
       FROM conversations c
       JOIN rooms r ON c.room_id = r.id
@@ -173,7 +177,12 @@ export function listConversations(peerId: string): ConversationSummary[] {
   const rooms: RoomSummary[] = roomRows.map((row) => ({
     ...rowToConversation(row),
     type: 'room',
-    room: { id: row.room_id as number, name: row.room_name as string, memberCount: row.member_count as number },
+    room: {
+      id: row.room_id as number,
+      name: row.room_name as string,
+      memberCount: row.member_count as number,
+      createdBy: (row.room_created_by as string | null) ?? null,
+    },
     lastMessage: lastOf(row.id as number),
   }))
 
@@ -198,13 +207,21 @@ export function addMessage(conversationId: number, senderId: string, text: strin
     id: Number(result.lastInsertRowid),
     conversationId,
     senderId,
-    senderName: findPeer(senderId)?.name ?? DEPARTED_PEER_NAME,
+    ...senderNetworkOf(senderId),
     kind: 'text',
     text,
     fileId: null,
     file: null,
     createdAt: now,
   }
+}
+
+/** 实时投递消息时发送者的展示信息（历史读取走 SQL JOIN，这里单查一次） */
+function senderNetworkOf(senderId: string): { senderName: string; senderIp: string | null; senderMac: string | null } {
+  const peer = findPeer(senderId)
+  return peer
+    ? { senderName: peer.name, senderIp: peer.ip, senderMac: peer.mac }
+    : { senderName: DEPARTED_PEER_NAME, senderIp: null, senderMac: null }
 }
 
 /** 文件消息：kind 由文件 mime 推导（图片内联展示，其余为文件卡片） */
@@ -220,7 +237,7 @@ export function addFileMessage(conversationId: number, senderId: string, fileId:
     id: Number(result.lastInsertRowid),
     conversationId,
     senderId,
-    senderName: findPeer(senderId)?.name ?? DEPARTED_PEER_NAME,
+    ...senderNetworkOf(senderId),
     kind: file.kind,
     text: null,
     fileId,

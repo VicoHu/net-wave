@@ -7,6 +7,7 @@ let app: AppHandle
 interface RoomInfo {
   id: number
   name: string
+  createdBy: string | null
   memberCount: number
   conversationId: number
 }
@@ -188,6 +189,60 @@ describe('多人房间', () => {
     const rooms = await listRooms(creator)
     expect(rooms.find((r) => r.id === room.id)?.memberCount).toBe(2)
     watcher.ws.close()
+  })
+
+  it('创建者删除房间：公开列表消失、成员历史不可访问、在线节点收到广播', async () => {
+    const owner = await createPeer(app.baseUrl)
+    const room = await createRoom(owner, '待删除房间')
+    const member = await createPeer(app.baseUrl)
+    await joinRoom(member, room.id)
+    // 留一条历史消息，验证删除后不可再读
+    const m = await connectWs(app, member)
+    await m.wait('presence')
+    sendWs(m.ws, { type: 'send-message', conversationId: room.conversationId, text: '将被连带删除' })
+    await m.wait('message')
+    m.ws.close()
+
+    const denied = await fetch(`${app.baseUrl}/api/conversations/${room.conversationId}/messages`, {
+      headers: { Cookie: `nw_peer=${member}` },
+    })
+    expect(denied.status).toBe(200)
+
+    const watcher = await connectWs(app, member)
+    const gotBroadcast = watcher.wait('rooms-updated')
+
+    const res = await fetch(`${app.baseUrl}/api/rooms/${room.id}`, {
+      method: 'DELETE',
+      headers: { Cookie: `nw_peer=${owner}` },
+    })
+    expect(res.status).toBe(200)
+    await gotBroadcast
+    watcher.ws.close()
+
+    expect((await listRooms(owner)).find((r) => r.id === room.id)).toBeUndefined()
+    // 会话历史随房间一并删除
+    const history = await fetch(`${app.baseUrl}/api/conversations/${room.conversationId}/messages`, {
+      headers: { Cookie: `nw_peer=${member}` },
+    })
+    expect(history.status).toBe(404)
+    const convs = await fetch(`${app.baseUrl}/api/conversations`, {
+      headers: { Cookie: `nw_peer=${member}` },
+    })
+    const { conversations } = (await convs.json()) as { conversations: { id: number }[] }
+    expect(conversations.find((c) => c.id === room.conversationId)).toBeUndefined()
+  })
+
+  it('非创建者删除房间被拒绝', async () => {
+    const owner = await createPeer(app.baseUrl)
+    const room = await createRoom(owner, '受保护房间')
+    const intruder = await createPeer(app.baseUrl)
+
+    const res = await fetch(`${app.baseUrl}/api/rooms/${room.id}`, {
+      method: 'DELETE',
+      headers: { Cookie: `nw_peer=${intruder}` },
+    })
+    expect(res.status).toBe(403)
+    expect((await listRooms(owner)).find((r) => r.id === room.id)?.name).toBe('受保护房间')
   })
 
   it('持久化：重启后房间列表、成员与历史完整（含文件消息）', async () => {

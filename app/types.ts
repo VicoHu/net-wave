@@ -5,11 +5,14 @@ import type { FileMeta, MessageRow } from './message-view'
 export interface Peer {
   id: string
   name: string
+  ip?: string | null
+  mac?: string | null
 }
 
 export interface RoomInfo {
   id: number
   name: string
+  createdBy: string | null
   memberCount: number
   conversationId: number
 }
@@ -17,8 +20,8 @@ export interface RoomInfo {
 export interface ConversationSummary {
   id: number
   type: 'direct' | 'room'
-  peer?: { id: string; name: string }
-  room?: { id: number; name: string; memberCount: number }
+  peer?: { id: string; name: string; ip?: string | null; mac?: string | null }
+  room?: { id: number; name: string; memberCount: number; createdBy: string | null }
   lastMessage: MessageRow | null
 }
 

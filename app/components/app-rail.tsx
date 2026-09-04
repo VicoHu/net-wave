@@ -1,6 +1,7 @@
 'use client'
 
-import { PlusIcon, WavesIcon } from 'lucide-react'
+import Link from 'next/link'
+import { PlusIcon, ShieldIcon, WavesIcon } from 'lucide-react'
 import { Separator } from '@components/ui/separator'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@components/ui/tooltip'
 
@@ -10,7 +11,7 @@ interface AppRailProps {
 
 /**
  * 最左侧服务中心栏（Discord rail）：本中心只有一个「服务」，因此只承载
- * 品牌入口与创建房间动作；存储 / 扫码收在底部节点面板。
+ * 品牌入口、创建房间与管理中心入口；存储 / 扫码 / 设置收在底部节点面板。
  */
 export function AppRail({ onCreateRoom }: AppRailProps) {
   return (
@@ -37,6 +38,18 @@ export function AppRail({ onCreateRoom }: AppRailProps) {
           <PlusIcon className="size-6" />
         </TooltipTrigger>
         <TooltipContent side="right">创建房间</TooltipContent>
+      </Tooltip>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Link
+            href="/admin"
+            aria-label="管理中心"
+            className="flex size-12 items-center justify-center rounded-full text-muted-foreground transition-all hover:rounded-2xl hover:bg-primary hover:text-white"
+          >
+            <ShieldIcon className="size-6" />
+          </Link>
+        </TooltipTrigger>
+        <TooltipContent side="right">管理中心</TooltipContent>
       </Tooltip>
     </nav>
   )

@@ -3,9 +3,11 @@ import next from 'next'
 import { WebSocketServer } from 'ws'
 import { openDb } from './src/db'
 import { addFileMessage, addMessage, canAccessConversation, findConversation, type MessageRow } from './src/chat'
-import { findPeer } from './src/peers'
+import { findPeer, updatePeerIp, updatePeerMac } from './src/peers'
 import { roomMemberIds } from './src/rooms'
 import { getHub } from './src/hub'
+import { normalizeIp, lookupMac } from './src/net-info'
+import { ensureAdminPassword } from './src/admin'
 
 const dev = process.env.NODE_ENV !== 'production'
 const port = Number(process.env.PORT ?? 3000)
@@ -13,6 +15,8 @@ const dataDir = process.env.DATA_DIR ?? './data'
 
 // 启动即建库：确保数据目录与 SQLite 就绪
 openDb(dataDir)
+// 管理员密码：ADMIN_PASSWORD 环境变量优先，否则首启生成随机密码并打印
+ensureAdminPassword()
 
 const hub = getHub()
 const app = next({ dev })
@@ -21,6 +25,8 @@ const handle = app.getRequestHandler()
 await app.prepare()
 
 const server = createServer((req, res) => {
+  // Next route handlers 拿不到 socket，注入来源地址供登录限流等使用
+  req.headers['x-nw-client-ip'] = normalizeIp(req.socket.remoteAddress ?? '')
   void handle(req, res)
 })
 
@@ -56,6 +62,14 @@ wss.on('connection', (ws, req) => {
   if (!peerId) {
     ws.close(4001, '未识别的节点身份')
     return
+  }
+  // 记录节点来源地址并异步解析 MAC（ARP 缓存可能尚未收录，解析失败保持 null）
+  const ip = normalizeIp(req.socket.remoteAddress ?? '')
+  updatePeerIp(peerId, ip)
+  if (ip) {
+    void lookupMac(ip).then((mac) => {
+      if (mac) updatePeerMac(peerId, mac)
+    })
   }
   ws.send(JSON.stringify({ type: 'connected' }))
   hub.add(ws, peerId)

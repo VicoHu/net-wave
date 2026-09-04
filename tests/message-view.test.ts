@@ -15,6 +15,8 @@ function msg(partial: Partial<MessageRow>): MessageRow {
     conversationId: 1,
     senderId: 'peer-a',
     senderName: '甲',
+    senderIp: null,
+    senderMac: null,
     kind: 'text',
     text: 'hello',
     fileId: null,
