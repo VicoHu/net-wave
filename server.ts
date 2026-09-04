@@ -1,6 +1,13 @@
 import { createServer } from 'node:http'
 import next from 'next'
 import { WebSocketServer } from 'ws'
+import nextEnv from '@next/env'
+
+// tsx 不加载 .env*，Next 又要等到自身初始化才加载；
+// 管理员密码等启动期逻辑必须先于 next() 拿到 env，故在此显式加载（幂等）。
+// @next/env 为 CJS 且 ESM 命名导入不可用，故走默认导入解构
+const { loadEnvConfig } = nextEnv
+loadEnvConfig(process.cwd(), process.env.NODE_ENV !== 'production')
 import { openDb } from './src/db'
 import { addFileMessage, addMessage, canAccessConversation, findConversation, type MessageRow } from './src/chat'
 import { findPeer, updatePeerIp, updatePeerMac } from './src/peers'
@@ -8,6 +15,10 @@ import { roomMemberIds } from './src/rooms'
 import { getHub } from './src/hub'
 import { normalizeIp, lookupMac } from './src/net-info'
 import { ensureAdminPassword } from './src/admin'
+
+// tsx 不加载 .env*，Next 又要等到自身初始化才加载；
+// 管理员密码等启动期逻辑必须先于 next() 拿到 env，故在此显式加载（幂等）
+loadEnvConfig(process.cwd(), process.env.NODE_ENV !== 'production')
 
 const dev = process.env.NODE_ENV !== 'production'
 const port = Number(process.env.PORT ?? 3000)
