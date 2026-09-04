@@ -1,9 +1,14 @@
 'use client'
 
-// React 19 适配：必须在任何 Semi 组件渲染前执行（官方要求置于入口最顶部）
-import '@douyinfe/semi-ui/react19-adapter'
 import type { ReactNode } from 'react'
+import { TooltipProvider } from '@components/ui/tooltip'
+import { Toaster } from '@components/ui/sonner'
 
 export function Providers({ children }: { children: ReactNode }) {
-  return <>{children}</>
+  return (
+    <TooltipProvider delayDuration={200}>
+      {children}
+      <Toaster position="top-center" />
+    </TooltipProvider>
+  )
 }

@@ -1,8 +1,30 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { Avatar, Button, Empty, Popconfirm, Table, Tag, Toast, Typography } from '@douyinfe/semi-ui'
-import { IconServer, IconDelete } from '@douyinfe/semi-icons'
+import Link from 'next/link'
+import { ArrowLeftIcon, FileIcon, ImageIcon, Trash2Icon } from 'lucide-react'
+import { toast } from 'sonner'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@components/ui/alert-dialog'
+import { Button } from '@components/ui/button'
+import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@components/ui/empty'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@components/ui/table'
 import { formatSize } from '../format'
 
 interface StorageFile {
@@ -39,88 +61,99 @@ export default function StoragePage() {
   const remove = async (id: string) => {
     const res = await fetch(`/api/files/${id}`, { method: 'DELETE' })
     if (res.ok) {
-      Toast.success('已删除')
+      toast.success('已删除')
       await load()
     } else {
-      Toast.error('删除失败')
+      toast.error('删除失败')
     }
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: 'transparent' }}>
-      <header
-        className="nw-header"
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 12,
-          padding: '12px 20px',
-        }}
-      >
-        <span
-          aria-hidden
-          style={{
-            width: 28,
-            height: 28,
-            borderRadius: '50%',
-            background: 'linear-gradient(135deg, #5865f2 0%, #ec48bd 100%)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: '#fff',
-            flexShrink: 0,
-          }}
-        >
-          <IconServer size="small" />
-        </span>
-        <Typography.Title heading={5} className="nw-header-title" style={{ margin: 0 }}>
-          存储管理
-        </Typography.Title>
-        <div style={{ flex: 1 }} />
-        <Tag color="indigo" size="large">
+    <div className="flex h-dvh flex-col">
+      <header className="flex h-12 shrink-0 items-center gap-2 border-b border-white/[0.06] px-3 md:px-4">
+        <Button variant="ghost" size="icon-sm" aria-label="返回" asChild>
+          <Link href="/">
+            <ArrowLeftIcon />
+          </Link>
+        </Button>
+        <h1 className="font-semibold">存储管理</h1>
+        <div className="flex-1" />
+        <span className="rounded-full bg-secondary px-3 py-1 text-xs font-medium text-secondary-foreground">
           总占用 {formatSize(totalSize)}
-        </Tag>
-        <Button onClick={() => history.back()}>返回</Button>
+        </span>
       </header>
 
-      <div style={{ maxWidth: 900, margin: '0 auto', padding: 20 }}>
-        <Table<StorageFile>
-          dataSource={files}
-          loading={!loaded}
-          emptyContent={<Empty description="暂无文件" />}
-          pagination={{ pageSize: 20 }}
-          columns={[
-            {
-              title: '文件名',
-              dataIndex: 'name',
-              render: (name: string, row) => (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <Avatar size="extra-small" color={row.kind === 'image' ? 'pink' : 'indigo'}>
-                    {row.kind === 'image' ? '图' : '件'}
-                  </Avatar>
-                  <span style={{ wordBreak: 'break-all' }}>{name}</span>
-                </div>
-              ),
-            },
-            { title: '大小', dataIndex: 'size', width: 110, render: (size: number) => formatSize(size) },
-            {
-              title: '时间',
-              dataIndex: 'createdAt',
-              width: 180,
-              render: (t: number) => new Date(t).toLocaleString('zh-CN', { hour12: false }),
-            },
-            {
-              title: '',
-              width: 90,
-              render: (_: unknown, row: StorageFile) => (
-                <Popconfirm title="确认删除？" content="删除后历史消息中的下载入口将失效" onConfirm={() => void remove(row.id)}>
-                  <Button type="danger" theme="light" icon={<IconDelete />} size="small" />
-                </Popconfirm>
-              ),
-            },
-          ]}
-        />
-      </div>
+      <main className="mx-auto w-full max-w-4xl flex-1 overflow-y-auto p-4 md:p-6">
+        {loaded && files.length === 0 ? (
+          <Empty className="rounded-xl bg-sidebar">
+            <EmptyHeader>
+              <EmptyMedia variant="icon">
+                <FileIcon />
+              </EmptyMedia>
+              <EmptyTitle>还没有文件</EmptyTitle>
+              <EmptyDescription>在会话中发送的图片与文件会集中保存在这里，供随时回看与下载。</EmptyDescription>
+            </EmptyHeader>
+          </Empty>
+        ) : (
+          <div className="overflow-x-auto rounded-xl bg-sidebar">
+            <Table className="min-w-[560px]">
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead>文件名</TableHead>
+                  <TableHead className="w-24">大小</TableHead>
+                  <TableHead className="w-44">时间</TableHead>
+                  <TableHead className="w-16">
+                    <span className="sr-only">操作</span>
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {files.map((file) => (
+                  <TableRow key={file.id}>
+                    <TableCell>
+                      <div className="flex min-w-0 items-center gap-2.5">
+                        {file.kind === 'image' ? (
+                          <ImageIcon className="size-4 shrink-0 text-nw-magenta" />
+                        ) : (
+                          <FileIcon className="size-4 shrink-0 text-muted-foreground" />
+                        )}
+                        <span className="break-all">{file.name}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{formatSize(file.size)}</TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {new Date(file.createdAt).toLocaleString('zh-CN', { hour12: false })}
+                    </TableCell>
+                    <TableCell>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button variant="ghost" size="icon-sm" aria-label={`删除 ${file.name}`} className="text-muted-foreground hover:text-destructive">
+                            <Trash2Icon />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>删除「{file.name}」？</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              删除后历史消息中的下载入口将失效，此操作不可撤销。
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>取消</AlertDialogCancel>
+                            <AlertDialogAction onClick={() => void remove(file.id)}>
+                              删除
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </main>
     </div>
   )
 }
