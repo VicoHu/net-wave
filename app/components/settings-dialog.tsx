@@ -34,8 +34,8 @@ const MAC_KEY = 'nw_show_mac'
 const SAFE_MODE_KEY = 'nw_safe_mode'
 const BLUR_STRENGTH_KEY = 'nw_blur_strength'
 
-const BLUR_STRENGTH_DEFAULT = 16
-const BLUR_STRENGTH_MAX = 40
+const BLUR_STRENGTH_DEFAULT = 8
+const BLUR_STRENGTH_MAX = 24
 
 const readBlurStrength = () => {
   const raw = localStorage.getItem(BLUR_STRENGTH_KEY)
