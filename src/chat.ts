@@ -22,7 +22,7 @@ export interface MessageRow {
   senderName: string
   senderIp: string | null
   senderMac: string | null
-  kind: 'text' | 'image' | 'file'
+  kind: 'text' | 'image' | 'video' | 'file'
   text: string | null
   fileId: string | null
   file: FileMeta | null
@@ -224,7 +224,7 @@ function senderNetworkOf(senderId: string): { senderName: string; senderIp: stri
     : { senderName: DEPARTED_PEER_NAME, senderIp: null, senderMac: null }
 }
 
-/** 文件消息：kind 由文件 mime 推导（图片内联展示，其余为文件卡片） */
+/** 文件消息：kind 由文件 mime 推导（图片内联展示，视频下载后播放，其余为文件卡片） */
 export function addFileMessage(conversationId: number, senderId: string, fileId: string): MessageRow | null {
   const file = findFile(fileId)
   if (!file || file.deleted) return null

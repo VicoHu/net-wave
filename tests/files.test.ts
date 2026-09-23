@@ -70,6 +70,20 @@ describe('图片与文件传输', () => {
     expect(meta.kind).toBe('file')
   })
 
+  it('上传视频：kind 为 video，消息按视频类型下发', async () => {
+    const { peerA, a, b, conversationId } = await setupDirectConversation(app)
+    const meta = await upload(peerA, randomBytes(96), '录屏.mp4', 'video/mp4')
+    expect(meta.kind).toBe('video')
+
+    const bPromise = b.wait('message')
+    sendWs(a.ws, { type: 'send-message', conversationId, fileId: meta.fileId })
+    const got = (await Promise.all([a.wait('message'), bPromise])) as { message: FileMessageRow }[]
+    expect(got[1].message.kind).toBe('video')
+    expect(got[1].message.file?.name).toBe('录屏.mp4')
+    a.ws.close()
+    b.ws.close()
+  })
+
   it('发送文件消息：双方收到含文件元数据的 message 事件', async () => {
     const { peerA, a, b, conversationId } = await setupDirectConversation(app)
     const meta = await upload(peerA, randomBytes(256), '会议纪要.txt', 'text/plain')

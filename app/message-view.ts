@@ -8,7 +8,7 @@ export interface FileMeta {
   name: string
   size: number
   mime: string
-  kind: 'image' | 'file'
+  kind: 'image' | 'video' | 'file'
   deleted: boolean
 }
 
@@ -93,6 +93,7 @@ export function extractCode(text: string): string | null {
 export function messagePreview(m: { kind: string; text: string | null; file?: { name: string } | null } | null): string {
   if (!m) return ''
   if (m.kind === 'image') return `[图片] ${m.file?.name ?? ''}`
+  if (m.kind === 'video') return `[视频] ${m.file?.name ?? ''}`
   if (m.kind === 'file') return `[文件] ${m.file?.name ?? ''}`
   return m.text ?? ''
 }

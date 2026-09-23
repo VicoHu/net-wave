@@ -411,6 +411,7 @@ function HomeInner() {
               messages={messages}
               loading={loadingMessages}
               display={display}
+              selfId={me?.id ?? null}
               emptyContent={
                 <div className="flex flex-1 items-center justify-center p-6 text-sm text-muted-foreground">
                   还没有消息，打个招呼吧

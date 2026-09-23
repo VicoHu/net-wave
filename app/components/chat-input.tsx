@@ -20,7 +20,8 @@ interface ChatInputProps {
 
 /**
  * Discord 式输入条：+ 上传附件（XHR 实时进度，完成后立即作为消息发出）、
- * Enter 发送 / Shift+Enter 换行（兼容中文输入法组词态）、文本非空时出现发送按钮。
+ * 直接粘贴文件发送、Enter 发送 / Shift+Enter 换行（兼容中文输入法组词态）、
+ * 文本非空时出现发送按钮。
  */
 export function ChatInput({ placeholder, onSendText, onSendFile }: ChatInputProps) {
   const [text, setText] = useState('')
@@ -126,6 +127,14 @@ export function ChatInput({ placeholder, onSendText, onSendFile }: ChatInputProp
             if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
               e.preventDefault()
               send()
+            }
+          }}
+          onPaste={(e) => {
+            // 粘贴板里的文件（截图、复制的图片/视频/文件）直接走上传发送
+            const files = e.clipboardData?.files
+            if (files && files.length > 0) {
+              e.preventDefault()
+              for (const file of files) uploadFile(file)
             }
           }}
         />

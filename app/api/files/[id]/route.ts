@@ -29,8 +29,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: '无权访问该文件' }, { status: 403 })
   }
 
-  // 图片 inline 供消息内联展示，其余文件作为附件下载
-  const disposition = file.kind === 'image' ? 'inline' : 'attachment'
+  // 图片/视频 inline 供消息内联展示（模糊封面取首帧），其余文件作为附件下载
+  const disposition = file.kind === 'file' ? 'attachment' : 'inline'
   return new Response(readFileStream(file.id) as unknown as ReadableStream<Uint8Array>, {
     headers: {
       'Content-Type': file.mime,

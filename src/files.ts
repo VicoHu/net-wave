@@ -10,15 +10,17 @@ export interface FileMeta {
   name: string
   size: number
   mime: string
-  kind: 'image' | 'file'
+  kind: 'image' | 'video' | 'file'
   uploadedBy: string
   createdAt: number
   deleted: boolean
 }
 
-/** 消息与文件统一的类型推导：图片内联展示，其余按文件卡片呈现 */
+/** 消息与文件统一的类型推导：图片内联展示，视频点击下载后播放，其余按文件卡片呈现 */
 export function fileKind(mime: string): FileMeta['kind'] {
-  return mime.startsWith('image/') ? 'image' : 'file'
+  if (mime.startsWith('image/')) return 'image'
+  if (mime.startsWith('video/')) return 'video'
+  return 'file'
 }
 
 function filesRoot(): string {
