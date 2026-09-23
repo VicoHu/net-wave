@@ -1,0 +1,22 @@
+# 版本控制与本地工具
+.git
+.codegraph
+.pi*
+__pycache__
+*.pyc
+
+# 依赖与构建产物（镜像内重新安装/构建）
+node_modules
+.next
+out
+build
+*.tsbuildinfo
+
+# 运行时数据与密钥（容器内挂载数据卷，绝不打进镜像）
+data
+.env*
+
+# 与镜像无关的本地文件
+docs
+tests
+.DS_Store

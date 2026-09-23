@@ -1,0 +1,23 @@
+services:
+  net-wave:
+    build: .
+    image: net-wave:local
+    container_name: net-wave
+    # 宿主机端口可在 .env 中用 PORT 覆盖；容器内固定 3000
+    ports:
+      - '${PORT:-3000}:3000'
+    environment:
+      # 留空时首启生成随机密码并打印到日志（见 README「管理员密码」）
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
+    volumes:
+      - net-wave-data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://127.0.0.1:3000/api/health || exit 1']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  net-wave-data:
