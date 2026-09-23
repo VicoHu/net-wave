@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- net-wave 局域网网关的 launchd 配置模板（macOS）。
+     安装：
+       cp 本文件 ~/Library/LaunchAgents/com.net-wave.lan-gateway.plist
+       把下方 lan-gateway.mjs 的路径改成本机仓库的绝对路径（zsh -ic 经交互 shell
+       加载 ~/.zshrc，从而取到 nvm/homebrew 安装的 node）
+       launchctl load ~/Library/LaunchAgents/com.net-wave.lan-gateway.plist
+     卸载：launchctl unload ~/Library/LaunchAgents/com.net-wave.lan-gateway.plist
+     对外端口默认 3800（与根目录 .env 的 PORT 保持一致），上游默认 127.0.0.1:3801；
+     如需修改，编辑 EnvironmentVariables。日志：/tmp/net-wave-lan-gateway.log -->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.net-wave.lan-gateway</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/zsh</string>
+    <string>-ic</string>
+    <string>exec node /Users/yourname/project/open-source/net-wave/scripts/lan-gateway.mjs</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>NW_GATEWAY_LISTEN</key>
+    <string>3800</string>
+    <key>NW_GATEWAY_UPSTREAM</key>
+    <string>127.0.0.1:3801</string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>/tmp/net-wave-lan-gateway.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/net-wave-lan-gateway.log</string>
+</dict>
+</plist>

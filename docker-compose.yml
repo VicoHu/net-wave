@@ -3,9 +3,10 @@ services:
     build: .
     image: net-wave:local
     container_name: net-wave
-    # 宿主机端口可在 .env 中用 PORT 覆盖；容器内固定 3000
+    # 宿主机绑定与端口可在 .env 中覆盖（PORT）；网关模式下由 scripts/deploy-gateway.sh
+    # 注入 NW_BIND=127.0.0.1（只绑回环，局域网流量走宿主机网关）+ 独立端口
     ports:
-      - '${PORT:-3000}:3000'
+      - '${NW_BIND:-0.0.0.0}:${PORT:-3000}:3000'
     environment:
       # 留空时首启生成随机密码并打印到日志（见 README「管理员密码」）
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}

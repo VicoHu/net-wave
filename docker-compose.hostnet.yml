@@ -1,0 +1,19 @@
+# Linux 宿主机专用覆盖：host 网络模式。
+# 服务中心直接使用宿主网络栈，局域网节点的真实 IP 与 MAC（宿主 ARP 缓存）均可正确获取；
+# 默认桥接网络下发布端口经 Docker NAT 中转，所有节点会显示为容器网桥网关地址。
+# 用法：docker compose -f docker-compose.yml -f docker-compose.hostnet.yml up -d --build
+services:
+  net-wave:
+    network_mode: host
+    # host 模式下端口映射不生效，置空避免 compose 警告；服务中心直接监听宿主端口（.env 的 PORT 可覆盖）
+    ports: []
+    environment:
+      # 留空时首启生成随机密码并打印到日志（见 README「管理员密码」）
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
+      - PORT=${PORT:-3000}
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://127.0.0.1:${PORT:-3000}/api/health || exit 1']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s

@@ -75,7 +75,37 @@ docker run --rm -v net-wave-data:/data -v "$PWD":/backup alpine \
 docker compose start
 ```
 
-> 注：容器网络隔离，节点 MAC 地址解析（依赖宿主机 ARP 缓存）在 Docker 部署下不可用，管理中心中 MAC 显示为未知；如需该能力，请用本地进程方式部署。
+### 客户端 IP 与 MAC（部署方式的影响）
+
+默认桥接网络下，发布端口经 Docker NAT 中转，服务中心看到的来源地址是容器网桥网关——所有节点会显示同一个 IP（如 `192.168.117.1`），MAC 也无法解析。这是 Docker 桥接网络的平台限制，OrbStack / Docker Desktop 同样如此且无配置可绕（参考 [orbstack/orbstack#710](https://github.com/orbstack/orbstack/issues/710)）。
+
+**Linux 宿主机（推荐）**——用 host 网络模式，IP 与 MAC 均可正确获取：
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.hostnet.yml up -d --build
+```
+
+此时服务中心直接监听宿主端口（`.env` 中 `PORT` 可覆盖，如 `PORT=3800`），浏览器访问 `http://<宿主机IP>:3800`。
+
+**macOS（OrbStack / Docker Desktop）**——虚拟机网络无法保留局域网来源地址，改用「宿主机网关」部署：网关（`scripts/lan-gateway.mjs`，零依赖 Node 脚本）作为唯一对外入口，把真实 IP 与 MAC 以请求头注入给服务中心，容器照常运行。
+
+1. 容器改为只监听宿主机 loopback（部署与升级都用这一条命令）：
+
+   ```bash
+   ./scripts/deploy-gateway.sh
+   ```
+
+2. 安装网关为 launchd 服务（开机自启、崩溃自动拉起）：
+
+   ```bash
+   cp scripts/com.net-wave.lan-gateway.plist ~/Library/LaunchAgents/
+   # 编辑 plist，把 lan-gateway.mjs 的路径改成本机仓库的绝对路径
+   launchctl load ~/Library/LaunchAgents/com.net-wave.lan-gateway.plist
+   ```
+
+3. 局域网照常访问 `http://<Mac的IP>:3800`（对外端口在 plist 的 `NW_GATEWAY_LISTEN` 与根目录 `.env` 的 `PORT` 中保持一致）。
+
+此部署下 IP 与 MAC 均正确；不想加宿主进程的话，退路是在本机直接运行（`pnpm build && pnpm start`），同样两者皆准。
 
 ## 项目结构
 
