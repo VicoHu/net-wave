@@ -14,8 +14,9 @@ import {
 import { Switch } from '@components/ui/switch'
 import { Slider } from '@components/ui/slider'
 import { Separator } from '@components/ui/separator'
-// 模糊强度预览样图：直接同名覆盖 app/components/blur-preview.jpg 即可替换（建议宽 360px 左右），
-// 浮层高度按图片固有宽高比自适应；若更换格式（png/webp 等）需同步修改下方 import 的扩展名
+// 模糊强度预览样图：直接同名覆盖 app/components/blur-preview.jpg 即可替换
+// （显示宽度 16rem，资源建议宽 ~512px 即 2x）；浮层高度按图片固有宽高比自适应，
+// 若更换格式（png/webp 等）需同步修改下方 import 的扩展名
 import blurPreview from './blur-preview.jpg'
 
 /** 消息区显示偏好：仅影响本机视图，默认开启 */
@@ -83,7 +84,7 @@ function BlurPreview({ strength, percent }: { strength: number; percent: number 
       className="pointer-events-none absolute bottom-full z-50 mb-2 -translate-x-1/2"
       style={{ left: `${percent}%` }}
     >
-      <div className="w-44 overflow-hidden rounded-lg border bg-popover p-1 shadow-md">
+      <div className="w-64 overflow-hidden rounded-lg border bg-popover p-1 shadow-md">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={blurPreview.src}
