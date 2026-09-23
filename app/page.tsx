@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { ArrowLeftIcon, HashIcon, WavesIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@components/ui/button'
+import { Switch } from '@components/ui/switch'
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@components/ui/empty'
 import {
   AlertDialog,
@@ -406,6 +407,14 @@ function HomeInner() {
                   <h1 className="truncate font-semibold">{conversationName(activeConversation)}</h1>
                 </>
               )}
+              <div className="ml-auto flex items-center gap-2">
+                <span className="hidden text-sm text-muted-foreground sm:inline">安全模式</span>
+                <Switch
+                  checked={display.safeMode}
+                  onCheckedChange={(checked) => updateDisplay({ safeMode: checked })}
+                  aria-label="安全模式：开启后图片与视频封面默认高斯模糊"
+                />
+              </div>
             </header>
             <MessageList
               messages={messages}

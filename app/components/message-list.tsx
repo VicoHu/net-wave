@@ -129,10 +129,20 @@ function FileCard({ file }: { file: NonNullable<MessageRow['file']> }) {
 }
 
 /**
- * 视频消息卡片：封面默认高斯模糊，点击后完整下载（实时进度），
+ * 视频消息卡片：安全模式开启时封面高斯模糊，点击后完整下载（实时进度），
  * 完成即用本地 Blob 播放——弱网下不会出现边下边卡。
  */
-function VideoCard({ file, onPlay }: { file: NonNullable<MessageRow['file']>; onPlay: (blob: Blob, name: string) => void }) {
+function VideoCard({
+  file,
+  safeMode,
+  blurStrength,
+  onPlay,
+}: {
+  file: NonNullable<MessageRow['file']>
+  safeMode: boolean
+  blurStrength: number
+  onPlay: (blob: Blob, name: string) => void
+}) {
   const [progress, setProgress] = useState<number | null>(null)
 
   const play = () => {
@@ -151,14 +161,15 @@ function VideoCard({ file, onPlay }: { file: NonNullable<MessageRow['file']>; on
             <FileIcon className="size-5 text-muted-foreground" />
           </div>
         ) : (
-          // 仅取首帧作封面（preload=metadata），并加高斯模糊不直接清晰展示
+          // 仅取首帧作封面（preload=metadata）；安全模式开启时加高斯模糊不直接清晰展示
           <video
             src={`/api/files/${file.id}`}
             preload="metadata"
             muted
             playsInline
             aria-hidden
-            className="size-full scale-110 object-cover blur-md"
+            className={cn('size-full object-cover', safeMode && 'scale-110')}
+            style={safeMode ? { filter: `blur(${blurStrength}px)` } : undefined}
           />
         )}
       </div>
@@ -192,13 +203,17 @@ function VideoCard({ file, onPlay }: { file: NonNullable<MessageRow['file']>; on
   )
 }
 
-/** 单条消息正文：文本（含验证码复制 chip）/ 图片（模糊封面）/ 视频 / 文件 */
+/** 单条消息正文：文本（含验证码复制 chip）/ 图片 / 视频 / 文件；图片与视频封面受安全模式与模糊强度控制 */
 function MessageBody({
   message,
+  safeMode,
+  blurStrength,
   onPreviewImage,
   onPlayVideo,
 }: {
   message: MessageRow
+  safeMode: boolean
+  blurStrength: number
   onPreviewImage: (url: string, name: string) => void
   onPlayVideo: (blob: Blob, name: string) => void
 }) {
@@ -212,18 +227,19 @@ function MessageBody({
         className="block w-fit cursor-zoom-in overflow-hidden rounded-lg"
         onClick={() => onPreviewImage(url, file.name)}
       >
-        {/* 默认高斯模糊，点击后在灯箱中清晰查看；模糊晕影由外层 overflow-hidden 裁在图片框内 */}
+        {/* 安全模式开启时高斯模糊，点击后在灯箱中清晰查看；模糊晕影由外层 overflow-hidden 裁在图片框内 */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={url}
           alt={file.name}
-          className="max-h-80 w-auto max-w-full scale-105 blur-lg"
+          className={cn('max-h-80 w-auto max-w-full', safeMode && 'scale-105')}
+          style={safeMode ? { filter: `blur(${blurStrength}px)` } : undefined}
         />
       </button>
     )
   }
   if (message.kind === 'video' && message.file) {
-    return <VideoCard file={message.file} onPlay={onPlayVideo} />
+    return <VideoCard file={message.file} safeMode={safeMode} blurStrength={blurStrength} onPlay={onPlayVideo} />
   }
   if (message.kind === 'file' && message.file) {
     return <FileCard file={message.file} />
@@ -280,7 +296,7 @@ function MessageRowView({
       >
         {hoverClock}
         <div className="min-w-0 flex-1">
-          <MessageBody message={message} onPreviewImage={onPreviewImage} onPlayVideo={onPlayVideo} />
+          <MessageBody message={message} safeMode={display.safeMode} blurStrength={display.blurStrength} onPreviewImage={onPreviewImage} onPlayVideo={onPlayVideo} />
         </div>
       </MessageScrollerItem>
     )
@@ -338,7 +354,7 @@ function MessageRowView({
           <span className="text-[11px] text-muted-foreground">{formatTime(message.createdAt)}</span>
         </div>
         <div className="text-[15px]/relaxed">
-          <MessageBody message={message} onPreviewImage={onPreviewImage} onPlayVideo={onPlayVideo} />
+          <MessageBody message={message} safeMode={display.safeMode} blurStrength={display.blurStrength} onPreviewImage={onPreviewImage} onPlayVideo={onPlayVideo} />
         </div>
       </div>
     </MessageScrollerItem>
