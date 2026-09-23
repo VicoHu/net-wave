@@ -13,7 +13,7 @@ import { addFileMessage, addMessage, canAccessConversation, findConversation, ty
 import { findPeer, updatePeerIp, updatePeerMac } from './src/peers'
 import { roomMemberIds } from './src/rooms'
 import { getHub } from './src/hub'
-import { normalizeIp, lookupMac } from './src/net-info'
+import { clientIpFromRequest, clientMacFromRequest, lookupMac } from './src/net-info'
 import { ensureAdminPassword } from './src/admin'
 
 // tsx 不加载 .env*，Next 又要等到自身初始化才加载；
@@ -36,8 +36,9 @@ const handle = app.getRequestHandler()
 await app.prepare()
 
 const server = createServer((req, res) => {
-  // Next route handlers 拿不到 socket，注入来源地址供登录限流等使用
-  req.headers['x-nw-client-ip'] = normalizeIp(req.socket.remoteAddress ?? '')
+  // Next route handlers 拿不到 socket，注入来源地址供登录限流等使用；
+  // 始终覆写，防止客户端伪造同名头；有反向代理时优先取 X-Forwarded-For/X-Real-IP
+  req.headers['x-nw-client-ip'] = clientIpFromRequest(req.headers, req.socket.remoteAddress ?? '')
   void handle(req, res)
 })
 
@@ -74,10 +75,14 @@ wss.on('connection', (ws, req) => {
     ws.close(4001, '未识别的节点身份')
     return
   }
-  // 记录节点来源地址并异步解析 MAC（ARP 缓存可能尚未收录，解析失败保持 null）
-  const ip = normalizeIp(req.socket.remoteAddress ?? '')
+  // 记录节点来源地址与 MAC：NAT 虚拟化部署下两者由宿主机网关注入
+  // （X-Forwarded-For / x-nw-client-mac）；无网关时回退 socket 地址与本地 ARP 解析
+  const ip = clientIpFromRequest(req.headers, req.socket.remoteAddress ?? '')
   updatePeerIp(peerId, ip)
-  if (ip) {
+  const gatewayMac = clientMacFromRequest(req.headers)
+  if (gatewayMac) {
+    updatePeerMac(peerId, gatewayMac)
+  } else if (ip) {
     void lookupMac(ip).then((mac) => {
       if (mac) updatePeerMac(peerId, mac)
     })

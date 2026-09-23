@@ -113,4 +113,75 @@ describe('节点身份与在线列表', () => {
     expect(info.lanUrl).toMatch(/^https?:\/\//)
     expect(info.qrDataUrl).toMatch(/^data:image\//)
   })
+
+  it('经反向代理连接时按 X-Forwarded-For 记录节点 IP（容器桥接部署的取数路径）', async () => {
+    const peerA = await createPeer()
+    const peerB = await createPeer()
+
+    // A 的 WS 携带反代注入的 XFF（多级代理链，最左侧为真实节点）
+    const a = await new Promise<WebSocket>((resolve, reject) => {
+      const ws = new WebSocket(app.wsUrl, {
+        headers: { Cookie: `nw_peer=${peerA}`, 'X-Forwarded-For': '192.168.100.23, 10.0.0.1' },
+      })
+      ws.once('open', () => resolve(ws))
+      ws.once('error', reject)
+    })
+    const waitA = watchMessages(a)
+    await waitA('connected')
+
+    const convRes = await fetch(`${app.baseUrl}/api/conversations`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: `nw_peer=${peerA}` },
+      body: JSON.stringify({ peerId: peerB }),
+    })
+    const conversation = (await convRes.json()) as { id: number }
+    a.send(JSON.stringify({ type: 'send-message', conversationId: conversation.id, text: 'via proxy' }))
+    await waitA('message')
+
+    const res = await fetch(`${app.baseUrl}/api/conversations/${conversation.id}/messages`, {
+      headers: { Cookie: `nw_peer=${peerB}` },
+    })
+    const { messages } = (await res.json()) as { messages: { text: string; senderIp: string | null }[] }
+    expect(messages.find((m) => m.text === 'via proxy')?.senderIp).toBe('192.168.100.23')
+    a.close()
+  })
+
+  it('网关注入 x-nw-client-mac 时直接记录 MAC（NAT 部署下 MAC 仅宿主机可查）', async () => {
+    const peerA = await createPeer()
+    const peerB = await createPeer()
+
+    const a = await new Promise<WebSocket>((resolve, reject) => {
+      const ws = new WebSocket(app.wsUrl, {
+        headers: {
+          Cookie: `nw_peer=${peerA}`,
+          'X-Forwarded-For': '192.168.100.23',
+          'x-nw-client-mac': 'AA-BB-CC-DD-EE-FF',
+        },
+      })
+      ws.once('open', () => resolve(ws))
+      ws.once('error', reject)
+    })
+    const waitA = watchMessages(a)
+    await waitA('connected')
+
+    const convRes = await fetch(`${app.baseUrl}/api/conversations`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: `nw_peer=${peerA}` },
+      body: JSON.stringify({ peerId: peerB }),
+    })
+    const conversation = (await convRes.json()) as { id: number }
+    a.send(JSON.stringify({ type: 'send-message', conversationId: conversation.id, text: 'mac via gateway' }))
+    await waitA('message')
+
+    const res = await fetch(`${app.baseUrl}/api/conversations/${conversation.id}/messages`, {
+      headers: { Cookie: `nw_peer=${peerB}` },
+    })
+    const { messages } = (await res.json()) as {
+      messages: { text: string; senderIp: string | null; senderMac: string | null }[]
+    }
+    const sent = messages.find((m) => m.text === 'mac via gateway')
+    expect(sent?.senderMac).toBe('aa:bb:cc:dd:ee:ff')
+    expect(sent?.senderIp).toBe('192.168.100.23')
+    a.close()
+  })
 })
