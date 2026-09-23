@@ -53,3 +53,6 @@ next-env.d.ts
 # agent skills 与工具资产（非应用代码，含生成的 .pyc bytecode）
 __pycache__/
 *.pyc
+
+.zcode
+.zcodeignore
