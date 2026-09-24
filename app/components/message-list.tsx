@@ -132,8 +132,8 @@ function FileCard({ file }: { file: NonNullable<MessageRow['file']> }) {
 }
 
 /**
- * 视频消息卡片：安全模式开启时封面高斯模糊，点击后完整下载（实时进度），
- * 完成即用本地 Blob 播放——弱网下不会出现边下边卡。
+ * 视频消息：与图片同尺寸的大封面（preload=metadata 取首帧）+ 居中播放按钮，
+ * 点击封面后完整下载（实时进度），完成即用本地 Blob 播放——弱网下不会出现边下边卡。
  */
 function VideoCard({
   file,
@@ -149,6 +149,7 @@ function VideoCard({
   const [progress, setProgress] = useState<number | null>(null)
 
   const play = () => {
+    if (progress != null) return
     setProgress(0)
     fetchBlob(`/api/files/${file.id}`, setProgress)
       .then((blob) => onPlay(blob, file.name))
@@ -156,53 +157,53 @@ function VideoCard({
       .finally(() => setProgress(null))
   }
 
-  return (
-    <div className="flex max-w-md items-center gap-3 rounded-lg bg-sidebar p-3">
-      <div className="relative size-16 shrink-0 overflow-hidden rounded-lg bg-rail">
-        {file.deleted ? (
-          <div className="flex size-full items-center justify-center">
-            <FileIcon className="size-5 text-muted-foreground" />
-          </div>
-        ) : (
-          // 仅取首帧作封面（preload=metadata）；安全模式开启时加高斯模糊不直接清晰展示
-          <video
-            src={`/api/files/${file.id}`}
-            preload="metadata"
-            muted
-            playsInline
-            aria-hidden
-            className={cn('size-full object-cover', safeMode && 'scale-110')}
-            style={safeMode ? { filter: `blur(${blurStrength}px)` } : undefined}
-          />
-        )}
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="truncate text-sm font-medium">{file.name}</div>
-        <div className="text-xs text-muted-foreground">{formatSize(file.size)}</div>
-      </div>
-      {file.deleted ? (
+  // 已删除无封面可取：保留文件卡片样式仅作展示
+  if (file.deleted) {
+    return (
+      <div className="flex max-w-md items-center gap-3 rounded-lg bg-sidebar p-3">
+        <div className="flex size-16 shrink-0 items-center justify-center rounded-lg bg-rail">
+          <FileIcon className="size-5 text-muted-foreground" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-sm font-medium">{file.name}</div>
+          <div className="text-xs text-muted-foreground">{formatSize(file.size)}</div>
+        </div>
         <span className="shrink-0 rounded-full bg-destructive/15 px-2.5 py-0.5 text-xs font-medium text-destructive">
           已删除
         </span>
+      </div>
+    )
+  }
+
+  return (
+    <button
+      type="button"
+      aria-label={`播放视频 ${file.name}`}
+      className="group relative block w-fit cursor-pointer overflow-hidden rounded-lg"
+      onClick={play}
+    >
+      {/* 仅取首帧作封面（preload=metadata）；安全模式开启时加高斯模糊不直接清晰展示 */}
+      <video
+        src={`/api/files/${file.id}`}
+        preload="metadata"
+        muted
+        playsInline
+        aria-hidden
+        className={cn('max-h-80 w-auto max-w-full', safeMode && 'scale-110')}
+        style={safeMode ? { filter: `blur(${blurStrength}px)` } : undefined}
+      />
+      {progress != null ? (
+        <span className="absolute inset-0 flex items-center justify-center bg-black/50 text-sm font-medium text-white">
+          {progress}%
+        </span>
       ) : (
-        <Button
-          size="sm"
-          variant="secondary"
-          disabled={progress != null}
-          onClick={play}
-          className="shrink-0 gap-1.5"
-        >
-          {progress != null ? (
-            `${progress}%`
-          ) : (
-            <>
-              <PlayIcon data-icon="inline-start" />
-              播放
-            </>
-          )}
-        </Button>
+        <span className="absolute inset-0 flex items-center justify-center">
+          <span className="flex size-12 items-center justify-center rounded-full bg-black/60 text-white transition-transform group-hover:scale-105">
+            <PlayIcon className="size-6 fill-current" />
+          </span>
+        </span>
       )}
-    </div>
+    </button>
   )
 }
 
