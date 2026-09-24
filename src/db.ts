@@ -58,7 +58,9 @@ export function openDb(dataDir = process.env.DATA_DIR ?? './data'): Database.Dat
       mime TEXT NOT NULL,
       uploaded_by TEXT NOT NULL,
       created_at INTEGER NOT NULL,
-      deleted_at INTEGER
+      deleted_at INTEGER,
+      access_count INTEGER NOT NULL DEFAULT 0,
+      last_access_at INTEGER
     );
     CREATE TABLE IF NOT EXISTS messages (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -86,6 +88,14 @@ export function openDb(dataDir = process.env.DATA_DIR ?? './data'): Database.Dat
     if (!peerColumns.some((c) => c.name === column)) {
       db.exec(`ALTER TABLE peers ADD COLUMN ${column} TEXT`)
     }
+  }
+  // 增量迁移：既有库的 files 增加访问统计列（统一口径，见 ADR-0005）
+  const fileColumns = db.prepare('PRAGMA table_info(files)').all() as { name: string }[]
+  if (!fileColumns.some((c) => c.name === 'access_count')) {
+    db.exec('ALTER TABLE files ADD COLUMN access_count INTEGER NOT NULL DEFAULT 0')
+  }
+  if (!fileColumns.some((c) => c.name === 'last_access_at')) {
+    db.exec('ALTER TABLE files ADD COLUMN last_access_at INTEGER')
   }
   // 增量迁移：conversations 增加 type/room_id（旧结构为 peer_a/peer_b NOT NULL，需重建表）
   const convColumns = db.prepare('PRAGMA table_info(conversations)').all() as { name: string }[]

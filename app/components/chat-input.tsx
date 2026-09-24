@@ -5,6 +5,7 @@ import { PlusIcon, SendHorizontalIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@components/ui/button'
 import { Spinner } from '@components/ui/spinner'
+import { UploadConfirmDialog, type PendingUpload } from './upload-confirm-dialog'
 
 interface UploadTask {
   key: number
@@ -19,13 +20,14 @@ interface ChatInputProps {
 }
 
 /**
- * Discord 式输入条：+ 上传附件（XHR 实时进度，完成后立即作为消息发出）、
- * 直接粘贴文件发送、Enter 发送 / Shift+Enter 换行（兼容中文输入法组词态）、
+ * Discord 式输入条：+ 选择附件与粘贴文件先进上传确认弹窗（汇总可剔除，ADR-0004）、
+ * 确认后 XHR 实时进度上传，完成后立即作为消息发出、Enter 发送 / Shift+Enter 换行（兼容中文输入法组词态）、
  * 文本非空时出现发送按钮。
  */
 export function ChatInput({ placeholder, onSendText, onSendFile }: ChatInputProps) {
   const [text, setText] = useState('')
   const [uploads, setUploads] = useState<UploadTask[]>([])
+  const [pending, setPending] = useState<PendingUpload[]>([])
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const uploadKeyRef = useRef(0)
@@ -80,9 +82,20 @@ export function ChatInput({ placeholder, onSendText, onSendFile }: ChatInputProp
     xhr.send(form)
   }
 
+  /** 待发清单：选择器与粘贴入口都先进确认弹窗，确认后才真正上传 */
+  const enqueuePending = (files: File[]) => {
+    if (files.length === 0) return
+    setPending((prev) => [...prev, ...files.map((file) => ({ key: ++uploadKeyRef.current, file }))])
+  }
+
+  const confirmPending = (files: File[]) => {
+    setPending([])
+    for (const file of files) uploadFile(file)
+  }
+
   const onPickFiles = (files: FileList | null) => {
     if (!files) return
-    for (const file of files) uploadFile(file)
+    enqueuePending(Array.from(files))
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
@@ -130,11 +143,11 @@ export function ChatInput({ placeholder, onSendText, onSendFile }: ChatInputProp
             }
           }}
           onPaste={(e) => {
-            // 粘贴板里的文件（截图、复制的图片/视频/文件）直接走上传发送
+            // 粘贴板里的文件（截图、复制的图片/视频/文件）同样先进确认弹窗，防手滑误发
             const files = e.clipboardData?.files
             if (files && files.length > 0) {
               e.preventDefault()
-              for (const file of files) uploadFile(file)
+              enqueuePending(Array.from(files))
             }
           }}
         />
@@ -155,6 +168,11 @@ export function ChatInput({ placeholder, onSendText, onSendFile }: ChatInputProp
         multiple
         hidden
         onChange={(e) => onPickFiles(e.target.files)}
+      />
+      <UploadConfirmDialog
+        pending={pending}
+        onConfirm={confirmPending}
+        onCancel={() => setPending([])}
       />
     </div>
   )

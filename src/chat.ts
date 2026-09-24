@@ -105,6 +105,7 @@ const MESSAGE_SELECT = `
   SELECT m.id, m.conversation_id, m.sender_id, m.kind, m.text, m.created_at, m.file_id,
          f.id AS f_id, f.name AS f_name, f.size AS f_size, f.mime AS f_mime, f.uploaded_by AS f_uploaded_by,
          f.created_at AS f_created_at, f.deleted_at AS f_deleted_at,
+         f.access_count AS f_access_count, f.last_access_at AS f_last_access_at,
          p.name AS sender_name, p.ip AS sender_ip, p.mac AS sender_mac
   FROM messages m
   LEFT JOIN files f ON m.file_id = f.id
@@ -123,6 +124,8 @@ function rowToMessage(row: Record<string, unknown>): MessageRow {
           uploadedBy: (row.f_uploaded_by as string | null) ?? '',
           createdAt: row.f_created_at as number,
           deleted: row.f_deleted_at != null,
+          accessCount: (row.f_access_count as number | null) ?? 0,
+          lastAccessAt: (row.f_last_access_at as number | null) ?? null,
         }
       : null
   return {
