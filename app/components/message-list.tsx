@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { DownloadIcon, FileIcon, PlayIcon } from 'lucide-react'
+import { DownloadIcon, FileIcon, Loader2Icon, PlayIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   MessageScroller,
@@ -31,6 +31,9 @@ import type { DisplaySettings } from './settings-dialog'
 
 /** 距底不超过该值视为「贴底」，新消息到达时自动跟随 */
 const FOLLOW_THRESHOLD_PX = 24
+
+/** 距顶不超过该值触发向上加载更早消息（留缓冲避免贴顶闪烁） */
+const TOP_LOAD_THRESHOLD_PX = 80
 
 /** 从文本中提取验证码：secure context 一键复制，否则降级为选中全文 */
 async function copyCode(code: string, container: HTMLElement | null) {
@@ -394,14 +397,30 @@ interface MessageListProps {
   display: DisplaySettings
   /** 当前节点 id：自己发出的消息（含上传完成回显）即使正在上翻也强制回到底部 */
   selfId?: string | null
+  /** 滚动接近顶部时请求加载更早消息（分页状态由调用方管理） */
+  onLoadOlder?: () => void
+  /** 正在加载更早消息：顶部显示指示器 */
+  loadingOlder?: boolean
 }
 
 /**
  * Discord 式扁平消息流：日期分隔 + 同发送者折叠。
  * 贴底跟随由本组件自管（滚动原语的 follow 状态机在触摸过冲后无法恢复，
  * 这里以「距底 ≤ 阈值即贴底」的滚动位置判定替代）。
+ * 更早消息在顶部前插：以首尾消息 id 是否同时变化区分「切换会话」与「头部前插」，
+ * 前插时把 scrollTop 对位到锚点消息（视口首条可见项），视口停留在原消息上
+ * （viewport 关闭原生 overflow-anchor，避免与手动锚定叠加双跳）。
  */
-export function MessageList({ messages, loading, emptyContent, className, display, selfId }: MessageListProps) {
+export function MessageList({
+  messages,
+  loading,
+  emptyContent,
+  className,
+  display,
+  selfId,
+  onLoadOlder,
+  loadingOlder,
+}: MessageListProps) {
   const blocks = buildBlocks(messages)
   const [preview, setPreview] = useState<MediaPreview | null>(null)
 
@@ -412,6 +431,10 @@ export function MessageList({ messages, loading, emptyContent, className, displa
   // 落点距底偏大，若据此刻 scroll 事件判定会误认为用户上翻而关闭跟随
   const programmaticScrollRef = useRef(false)
   const prevListRef = useRef<{ first: number | null; last: number | null }>({ first: null, last: null })
+  // 头部前插的滚动锚点：触发加载时记录视口首条可见消息与其相对视口顶的偏移，
+  // 前插后把 scrollTop 对位到该消息（content-visibility 的高度估算有偏差，
+  // scrollHeight 差值补偿不够准，且渲染后高度收缩需二次修正）
+  const anchorRef = useRef<{ el: HTMLElement; offsetInView: number } | null>(null)
 
   const scrollToBottom = () => {
     const el = viewportRef.current
@@ -431,18 +454,72 @@ export function MessageList({ messages, loading, emptyContent, className, displa
     const el = viewportRef.current
     if (!el) return
     followBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight <= FOLLOW_THRESHOLD_PX
+    // 接近顶部时请求更早消息；重复触发/翻尽与否由调用方状态机裁决
+    if (onLoadOlder && el.scrollTop <= TOP_LOAD_THRESHOLD_PX) {
+      const vpTop = el.getBoundingClientRect().top
+      for (const item of el.querySelectorAll<HTMLElement>('[data-slot="message-scroller-item"]')) {
+        if (item.getBoundingClientRect().bottom - vpTop > 4) {
+          anchorRef.current = { el: item, offsetInView: item.getBoundingClientRect().top - vpTop }
+          break
+        }
+      }
+      onLoadOlder()
+    }
   }
 
   // 会话切换重置为贴底；新消息追加时按贴底状态跟随；
   // 自己发出的消息（输入框发送或上传回显）总是回到最新处。
   // 仅以首尾消息 id 变化作判定，历史整体刷新（同 id 集合）不打扰当前滚动位置。
+  // 首尾同时变化才算「切换会话」：头部前插更早消息只改首条 id，
+  // 此时把 scrollTop 对位到锚点消息，让视口停留在触发加载的那条消息上。
   useLayoutEffect(() => {
     const first = messages[0]?.id ?? null
     const last = messages[messages.length - 1]?.id ?? null
     const prev = prevListRef.current
     prevListRef.current = { first, last }
-    const switched = prev.first !== null && first !== prev.first
+    const switched = first !== prev.first && last !== prev.last
+    const prepended = prev.first !== null && first !== null && first !== prev.first && last === prev.last
     const appended = last !== prev.last
+    if (prepended) {
+      const el = viewportRef.current
+      const anchor = anchorRef.current
+      const content = contentRef.current
+      if (el && anchor?.el.isConnected && content) {
+        // 锚点对位（目标：anchor 相对视口顶 == 触发加载时的偏移）。
+        // content-visibility 未渲染项按 10rem 估算（约为真实行高 5 倍），prepend 后
+        // 视口附近的项逐帧渲染、高度持续收缩，单次/固定帧数补偿都不收敛——
+        // 以 ResizeObserver 事件驱动：内容尺寸每次变化就重新对位，直至稳定。
+        let anchoring = true
+        let expected: number | null = null
+        const keepAnchor = () => {
+          el.scrollTop += anchor.el.getBoundingClientRect().top - el.getBoundingClientRect().top - anchor.offsetInView
+          expected = el.scrollTop
+        }
+        // 区分程序赋值与用户滚动：scrollTop 与期望不符即用户已滚，锚定让位
+        const onScroll = () => {
+          if (anchoring && expected !== null && Math.abs(el.scrollTop - expected) > 1) {
+            anchoring = false
+            teardown()
+          }
+        }
+        const observer = new ResizeObserver(() => {
+          if (!anchoring || !anchor.el.isConnected) {
+            teardown()
+            return
+          }
+          keepAnchor()
+        })
+        const teardown = () => {
+          observer.disconnect()
+          el.removeEventListener('scroll', onScroll)
+          clearTimeout(timer)
+        }
+        const timer = setTimeout(teardown, 1200)
+        el.addEventListener('scroll', onScroll, { passive: true })
+        observer.observe(content)
+        keepAnchor()
+      }
+    }
     if (switched) followBottomRef.current = true
     const fromSelf = selfId != null && messages[messages.length - 1]?.senderId === selfId
     if (appended && fromSelf) followBottomRef.current = true
@@ -485,7 +562,12 @@ export function MessageList({ messages, loading, emptyContent, className, displa
     <>
       <MessageScrollerProvider defaultScrollPosition="end">
         <MessageScroller className={cn('min-h-0 flex-1', className)}>
-          <MessageScrollerViewport aria-label="消息列表" ref={viewportRef} onScroll={handleScroll}>
+          <MessageScrollerViewport
+            aria-label="消息列表"
+            className="[overflow-anchor:none]"
+            ref={viewportRef}
+            onScroll={handleScroll}
+          >
             <MessageScrollerContent className="gap-0 pb-4" ref={contentRef}>
               {loading ? (
                 <LoadingSkeleton />
@@ -509,6 +591,16 @@ export function MessageList({ messages, loading, emptyContent, className, displa
             </MessageScrollerContent>
             <MessageScrollerButton direction="end" />
           </MessageScrollerViewport>
+          {/* 加载指示器浮在列表顶部、脱离内容流：出现/消失不改变内容高度，不干扰滚动锚定 */}
+          {loadingOlder && (
+            <div
+              className="pointer-events-none absolute inset-x-0 top-0 z-10 flex justify-center py-2"
+              role="status"
+              aria-label="正在加载更早的消息"
+            >
+              <Loader2Icon className="size-4 animate-spin text-muted-foreground" />
+            </div>
+          )}
         </MessageScroller>
       </MessageScrollerProvider>
 

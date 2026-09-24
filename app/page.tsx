@@ -47,6 +47,9 @@ const SIDEBAR_WIDTH_MIN = 220
 const SIDEBAR_WIDTH_MAX = 400
 const SIDEBAR_WIDTH_DEFAULT = 280
 
+/** 历史消息分页大小：与后端 listMessages 默认值一致，返回不足一页即已翻尽 */
+const MESSAGES_PAGE_SIZE = 50
+
 const clampWidth = (value: number) =>
   Math.min(SIDEBAR_WIDTH_MAX, Math.max(SIDEBAR_WIDTH_MIN, value))
 
@@ -119,6 +122,7 @@ function HomeInner() {
   const [dmToClose, setDmToClose] = useState<ConversationSummary | null>(null)
   const [filter, setFilter] = useState('')
   const [loadingMessages, setLoadingMessages] = useState(false)
+  const [loadingOlder, setLoadingOlder] = useState(false)
   const [display, updateDisplay] = useDisplaySettings()
   const sidebarWidth = useSidebarWidth()
   const wsRef = useRef<WebSocket | null>(null)
@@ -130,6 +134,11 @@ function HomeInner() {
   conversationsRef.current = conversations
   const displayRef = useRef(display)
   displayRef.current = display
+  // 上翻加载：滚动回调高频触发，进行中/翻尽由 ref 裁决，state 仅驱动顶部指示器
+  const loadingOlderRef = useRef(false)
+  const hasMoreRef = useRef(true)
+  const messagesRef = useRef<MessageRow[]>([])
+  messagesRef.current = messages
 
   // 当前会话由 URL ?c=<id> 驱动：移动端单栏切换获得浏览器返回键支持，且可直达深链
   const activeParam = searchParams.get('c')
@@ -162,8 +171,11 @@ function HomeInner() {
     [router],
   )
 
-  // 会话切换由 URL 驱动：进入即拉取该会话历史
+  // 会话切换由 URL 驱动：进入即拉取该会话最新一页历史
   useEffect(() => {
+    hasMoreRef.current = true
+    loadingOlderRef.current = false
+    setLoadingOlder(false)
     if (activeId == null) {
       setMessages([])
       return
@@ -175,6 +187,8 @@ function HomeInner() {
       if (!cancelled && res.ok) {
         const body = (await res.json()) as { messages: MessageRow[] }
         setMessages(body.messages)
+        // 不足一页说明历史已全部加载（含空会话）
+        hasMoreRef.current = body.messages.length >= MESSAGES_PAGE_SIZE
       }
       if (!cancelled) setLoadingMessages(false)
     })()
@@ -183,14 +197,44 @@ function HomeInner() {
     }
   }, [activeId])
 
-  /** 重新拉取当前打开会话的消息（离线补投递：断线重连后新消息自动出现） */
+  /**
+   * 重新拉取当前会话最新一页并与已加载历史合并（离线补投递：断线重连后新消息自动出现）。
+   * 直接整体替换会丢掉上翻加载的更早消息：合并保留头部旧消息、以最新页覆盖尾部。
+   */
   const refreshActiveMessages = useCallback(async () => {
     const current = activeIdRef.current
     if (current == null) return
     const res = await fetch(`/api/conversations/${current}/messages`)
     if (!res.ok) return
     const body = (await res.json()) as { messages: MessageRow[] }
-    setMessages(body.messages)
+    setMessages((prev) => {
+      const freshIds = new Set(body.messages.map((m) => m.id))
+      return [...prev.filter((m) => !freshIds.has(m.id)), ...body.messages]
+    })
+  }, [])
+
+  /** 上翻加载更早消息：以当前最早消息 id 为游标，前插到列表头部 */
+  const loadOlder = useCallback(async () => {
+    const current = activeIdRef.current
+    const oldest = messagesRef.current[0]
+    // 切换会话后首拉落地前，messagesRef 仍持旧会话数组：游标必须属于当前会话
+    if (current == null || oldest == null || oldest.conversationId !== current) return
+    if (loadingOlderRef.current || !hasMoreRef.current) return
+    loadingOlderRef.current = true
+    setLoadingOlder(true)
+    try {
+      const res = await fetch(`/api/conversations/${current}/messages?before=${oldest.id}`)
+      if (!res.ok) return
+      const body = (await res.json()) as { messages: MessageRow[] }
+      // 翻尽与否只采信当前会话的响应：会话已切换则丢弃，避免旧结论污染新会话
+      if (current !== activeIdRef.current) return
+      hasMoreRef.current = body.messages.length >= MESSAGES_PAGE_SIZE
+      if (body.messages.length === 0) return
+      setMessages((prev) => [...body.messages, ...prev])
+    } finally {
+      loadingOlderRef.current = false
+      setLoadingOlder(false)
+    }
   }, [])
 
   const connectWs = useCallback(() => {
@@ -482,6 +526,8 @@ function HomeInner() {
               loading={loadingMessages}
               display={display}
               selfId={me?.id ?? null}
+              onLoadOlder={loadOlder}
+              loadingOlder={loadingOlder}
               emptyContent={
                 <div className="flex flex-1 items-center justify-center p-6 text-sm text-muted-foreground">
                   还没有消息，打个招呼吧

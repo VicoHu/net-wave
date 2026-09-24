@@ -52,6 +52,40 @@ describe('点对点文本私聊', () => {
     expect(messages.messages.map((m) => m.text)).toContain('历史消息测试')
   })
 
+  it('向上翻页：before 游标返回更早消息且按时间升序', async () => {
+    const { peerA, peerB, a, b, conversationId } = await setupDirectConversation(app)
+    for (let i = 1; i <= 4; i++) {
+      sendWs(a.ws, { type: 'send-message', conversationId, text: `第 ${i} 条` })
+      await a.wait('message')
+    }
+    a.ws.close()
+
+    const fetchAll = async () => {
+      const res = await fetch(`${app.baseUrl}/api/conversations/${conversationId}/messages`, {
+        headers: { Cookie: `nw_peer=${peerB}` },
+      })
+      return ((await res.json()) as { messages: ChatMessageRow[] }).messages
+    }
+    const newest = await fetchAll()
+    expect(newest.map((m) => m.text)).toEqual(['第 1 条', '第 2 条', '第 3 条', '第 4 条'])
+
+    // 以第 2 条的 id 为游标，应只返回更早的第 1 条
+    const beforeId = newest[1].id
+    const res = await fetch(`${app.baseUrl}/api/conversations/${conversationId}/messages?before=${beforeId}`, {
+      headers: { Cookie: `nw_peer=${peerB}` },
+    })
+    expect(res.status).toBe(200)
+    const older = ((await res.json()) as { messages: ChatMessageRow[] }).messages
+    expect(older.map((m) => m.text)).toEqual(['第 1 条'])
+
+    // 游标早于最早一条消息：返回空，即「没有更多」
+    const resFirst = await fetch(`${app.baseUrl}/api/conversations/${conversationId}/messages?before=${newest[0].id}`, {
+      headers: { Cookie: `nw_peer=${peerB}` },
+    })
+    const none = ((await resFirst.json()) as { messages: ChatMessageRow[] }).messages
+    expect(none).toEqual([])
+  })
+
   it('非会话方的拉取被拒绝', async () => {
     const outsider = await createPeer(app.baseUrl)
     const { conversationId } = await setupDirectConversation(app)
