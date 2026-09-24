@@ -27,6 +27,7 @@ import { UserAvatar } from './components/user-avatar'
 import { SettingsDialog, useDisplaySettings } from './components/settings-dialog'
 import { cn } from '@lib/utils'
 import { conversationName, type MessageRow } from './message-view'
+import { currentNotificationPermission, dispatchMessageNotification } from './notifications'
 import type { ConversationSummary, CenterInfo, Peer, RoomInfo } from './types'
 
 function useIsMobile() {
@@ -115,6 +116,7 @@ function HomeInner() {
   const [roomModalVisible, setRoomModalVisible] = useState(false)
   const [settingsVisible, setSettingsVisible] = useState(false)
   const [roomToDelete, setRoomToDelete] = useState<{ id: number; name: string; conversationId: number } | null>(null)
+  const [dmToClose, setDmToClose] = useState<ConversationSummary | null>(null)
   const [filter, setFilter] = useState('')
   const [loadingMessages, setLoadingMessages] = useState(false)
   const [display, updateDisplay] = useDisplaySettings()
@@ -123,6 +125,11 @@ function HomeInner() {
   const activeIdRef = useRef<number | null>(null)
   const meRef = useRef<Peer | null>(null)
   meRef.current = me
+  // ws.onmessage 内读最新值用：通知分发与跳转所需的设置/会话列表快照
+  const conversationsRef = useRef<ConversationSummary[]>([])
+  conversationsRef.current = conversations
+  const displayRef = useRef(display)
+  displayRef.current = display
 
   // 当前会话由 URL ?c=<id> 驱动：移动端单栏切换获得浏览器返回键支持，且可直达深链
   const activeParam = searchParams.get('c')
@@ -203,6 +210,39 @@ function HomeInner() {
         if (message.senderId !== meRef.current?.id && document.hidden) {
           setUnreadFlash(true)
         }
+        // 按可见性分级提醒（决策 3）：页面不可见→系统通知；在看别的会话→页内 toast；正在看→不打扰
+        dispatchMessageNotification(
+          {
+            message,
+            conversation: conversationsRef.current.find((c) => c.id === message.conversationId),
+            selfId: meRef.current?.id ?? null,
+            activeConversationId: activeIdRef.current,
+            documentHidden: document.hidden,
+            pageNotification: displayRef.current.pageNotification,
+            systemNotification: displayRef.current.systemNotification,
+            permission: currentNotificationPermission(),
+          },
+          {
+            // tag 让同会话连续消息替换而非堆叠；点击聚焦窗口并跳回会话（close 兜底 Windows 不自动关）
+            system: (content) => {
+              const n = new Notification(content.title, {
+                body: content.body,
+                tag: `nw-${content.conversationId}`,
+              })
+              n.onclick = () => {
+                window.focus()
+                openConversation(content.conversationId)
+                n.close()
+              }
+            },
+            page: (content) => {
+              toast(content.title, {
+                description: content.body,
+                action: { label: '查看', onClick: () => openConversation(content.conversationId) },
+              })
+            },
+          },
+        )
         void loadConversations()
       } else if (data.type === 'conversations-updated') {
         void loadConversations()
@@ -214,7 +254,7 @@ function HomeInner() {
     ws.onclose = () => {
       setTimeout(connectWs, 3000)
     }
-  }, [loadConversations, loadRooms, refreshActiveMessages])
+  }, [loadConversations, loadRooms, refreshActiveMessages, openConversation])
 
   // 页内提醒：离开页面期间的新消息让标题在「新消息」与原标题间交替，回到页面即恢复
   useEffect(() => {
@@ -311,6 +351,26 @@ function HomeInner() {
     if (activeIdRef.current === room.conversationId) router.push('/')
   }
 
+  /** 关闭私信：仅从本人列表移除（服务端按节点隐藏，聊天记录保留） */
+  const hideConversation = async (conv: ConversationSummary) => {
+    const res = await fetch(`/api/conversations/${conv.id}`, { method: 'DELETE' })
+    setDmToClose(null)
+    if (!res.ok) {
+      toast.error('关闭私信失败')
+      return
+    }
+    toast.success(`已关闭私信 ${conversationName(conv)}`)
+    await loadConversations()
+    // 正在浏览被关闭会话时退回会话列表（移动端单栏由 URL 驱动回到私信列表）
+    if (activeIdRef.current === conv.id) router.push('/')
+  }
+
+  /** 分流：无聊天记录直接关闭；有记录先经确认弹窗 */
+  const closeConversation = (conv: ConversationSummary) => {
+    if (conv.lastMessage == null) void hideConversation(conv)
+    else setDmToClose(conv)
+  }
+
   const rename = async (name: string) => {
     const trimmed = name.trim()
     if (!trimmed || !me) return
@@ -357,6 +417,7 @@ function HomeInner() {
           onShowQr={() => setQrVisible(true)}
           onShowSettings={() => setSettingsVisible(true)}
           onDeleteRoom={(room) => setRoomToDelete(room)}
+          onCloseConversation={closeConversation}
         />
       </div>
 
@@ -494,6 +555,23 @@ function HomeInner() {
               onClick={() => roomToDelete && void deleteRoom(roomToDelete)}
             >
               删除
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      {/* 关闭私信确认：操作不销毁数据（隐藏语义），确认按钮用默认主色而非 destructive */}
+      <AlertDialog open={dmToClose !== null} onOpenChange={(open) => !open && setDmToClose(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>关闭与 {dmToClose && conversationName(dmToClose)} 的私信？</AlertDialogTitle>
+            <AlertDialogDescription>
+              聊天记录将保留，对方不受影响；对方再来消息时会重新出现。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction onClick={() => dmToClose && void hideConversation(dmToClose)}>
+              关闭
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

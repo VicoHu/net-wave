@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { CheckIcon, HashIcon, PencilIcon, PlusIcon, QrCodeIcon, ServerIcon, SettingsIcon, TrashIcon } from 'lucide-react'
+import { CheckIcon, HashIcon, PencilIcon, PlusIcon, QrCodeIcon, ServerIcon, SettingsIcon, TrashIcon, XIcon } from 'lucide-react'
 import { Input } from '@components/ui/input'
 import { Button } from '@components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@components/ui/tooltip'
@@ -29,6 +29,8 @@ interface AppSidebarProps {
   onShowQr: () => void
   onShowSettings: () => void
   onDeleteRoom: (room: { id: number; name: string; conversationId: number }) => void
+  /** 关闭私信：仅从本人列表移除该会话（有/无聊天记录的分流由页面层处理） */
+  onCloseConversation: (conv: ConversationSummary) => void
 }
 
 const matched = (name: string | undefined, filter: string) =>
@@ -72,6 +74,7 @@ export function AppSidebar({
   onShowQr,
   onShowSettings,
   onDeleteRoom,
+  onCloseConversation,
 }: AppSidebarProps) {
   const [editingName, setEditingName] = useState<string | null>(null)
 
@@ -83,11 +86,9 @@ export function AppSidebar({
   )
   const joinedRoomIds = new Set(conversations.filter((c) => c.type === 'room').map((c) => c.room?.id))
   const joinableRooms = rooms.filter((r) => !joinedRoomIds.has(r.id) && matched(r.name, filter))
-  const conversationPeerIds = new Set(
-    conversations.filter((c) => c.type === 'direct').map((c) => c.peer?.id),
-  )
-  const startablePeers = peers.filter(
-    (p) => p.id !== me?.id && !conversationPeerIds.has(p.id) && matched(p.name, filter),
+  const onlinePeerIds = new Set(peers.map((p) => p.id))
+  const onlinePeers = peers.filter(
+    (p) => p.id !== me?.id && matched(p.name, filter),
   )
 
   const saveRename = () => {
@@ -119,20 +120,39 @@ export function AppSidebar({
             const name = conversationName(conv)
             const preview = messagePreview(conv.lastMessage)
             return (
-              <button
-                key={conv.id}
-                type="button"
-                className={rowClass(conv.id === activeId)}
-                onClick={() => onOpenConversation(conv.id)}
-              >
-                <UserAvatar name={name} className="size-8" />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-medium">{name}</span>
-                  {preview && (
-                    <span className="block truncate text-xs text-muted-foreground">{preview}</span>
-                  )}
-                </span>
-              </button>
+              <div key={conv.id} className="relative">
+                <button
+                  type="button"
+                  className={cn(rowClass(conv.id === activeId), 'pr-8')}
+                  onClick={() => onOpenConversation(conv.id)}
+                >
+                  <UserAvatar
+                    name={name}
+                    online={!!conv.peer && onlinePeerIds.has(conv.peer.id)}
+                    className="size-8"
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium">{name}</span>
+                    {preview && (
+                      <span className="block truncate text-xs text-muted-foreground">{preview}</span>
+                    )}
+                  </span>
+                </button>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon-xs"
+                      aria-label={`关闭私信 ${name}`}
+                      className="absolute top-1/2 right-1 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                      onClick={() => onCloseConversation(conv)}
+                    >
+                      <XIcon />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>关闭私信</TooltipContent>
+                </Tooltip>
+              </div>
             )
           })
         )}
@@ -217,10 +237,10 @@ export function AppSidebar({
         )}
 
         <SectionHeader title="在线节点" />
-        {startablePeers.length === 0 ? (
+        {onlinePeers.length === 0 ? (
           <EmptyHint text="等待其他节点加入…" />
         ) : (
-          startablePeers.map((peer) => (
+          onlinePeers.map((peer) => (
             <button
               key={peer.id}
               type="button"
