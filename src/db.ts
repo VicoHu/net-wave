@@ -46,6 +46,11 @@ export function openDb(dataDir = process.env.DATA_DIR ?? './data'): Database.Dat
       joined_at INTEGER NOT NULL,
       PRIMARY KEY (room_id, peer_id)
     );
+    CREATE TABLE IF NOT EXISTS hidden_conversations (
+      conversation_id INTEGER NOT NULL,
+      peer_id TEXT NOT NULL,
+      PRIMARY KEY (conversation_id, peer_id)
+    );
     CREATE TABLE IF NOT EXISTS files (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,

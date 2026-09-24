@@ -9,7 +9,7 @@ import nextEnv from '@next/env'
 const { loadEnvConfig } = nextEnv
 loadEnvConfig(process.cwd(), process.env.NODE_ENV !== 'production')
 import { openDb } from './src/db'
-import { addFileMessage, addMessage, canAccessConversation, findConversation, type MessageRow } from './src/chat'
+import { addFileMessage, addMessage, canAccessConversation, clearConversationHides, findConversation, type MessageRow } from './src/chat'
 import { findPeer, updatePeerIp, updatePeerMac } from './src/peers'
 import { roomMemberIds } from './src/rooms'
 import { getHub } from './src/hub'
@@ -139,6 +139,9 @@ wss.on('connection', (ws, req) => {
     for (const recipient of recipients) {
       if (recipient) hub.sendToPeer(recipient, 'message', { message })
     }
+    // 新消息使被隐藏的会话重现：清除隐藏记录并广播全员刷新会话列表
+    clearConversationHides(conversation.id)
+    hub.broadcast('conversations-updated', {})
   })
 })
 

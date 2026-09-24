@@ -150,8 +150,13 @@ export function listConversations(peerId: string): ConversationSummary[] {
   }
 
   const directRows = db
-    .prepare("SELECT * FROM conversations WHERE type = 'direct' AND (peer_a = ? OR peer_b = ?) ORDER BY id DESC")
-    .all(peerId, peerId) as Record<string, unknown>[]
+    .prepare(`
+      SELECT * FROM conversations
+      WHERE type = 'direct' AND (peer_a = ? OR peer_b = ?)
+        AND id NOT IN (SELECT conversation_id FROM hidden_conversations WHERE peer_id = ?)
+      ORDER BY id DESC
+    `)
+    .all(peerId, peerId, peerId) as Record<string, unknown>[]
   const directs: DirectSummary[] = directRows.map((row) => {
     const conv = rowToConversation(row)
     const otherId = otherPeerOf(conv, peerId) ?? ''
@@ -244,4 +249,32 @@ export function addFileMessage(conversationId: number, senderId: string, fileId:
     file,
     createdAt: now,
   }
+}
+
+export type ConversationHiding = { ok: true } | { ok: false; reason: 'not-found' | 'forbidden' }
+
+/** 为本节点隐藏会话（仅从该节点的列表移除；聊天记录保留，对方视角不受影响）。
+ * 仅限私聊会话：房间无隐藏语义（列表不过滤，避免静默 no-op） */
+export function hideConversationForPeer(conversationId: number, peerId: string): ConversationHiding {
+  const conversation = findConversation(conversationId)
+  if (!conversation || conversation.type !== 'direct') return { ok: false, reason: 'not-found' }
+  if (!canAccessConversation(conversation, peerId)) return { ok: false, reason: 'forbidden' }
+  const db = openDb()
+  db.prepare('INSERT OR IGNORE INTO hidden_conversations (conversation_id, peer_id) VALUES (?, ?)').run(
+    conversationId,
+    peerId,
+  )
+  return { ok: true }
+}
+
+/** 新消息进入会话时清除全部隐藏记录：隐藏的会话带着新消息重新出现在双方列表 */
+export function clearConversationHides(conversationId: number): void {
+  openDb().prepare('DELETE FROM hidden_conversations WHERE conversation_id = ?').run(conversationId)
+}
+
+/** 本人再次发起私聊时解除本人对该会话的隐藏（不动对方的隐藏记录） */
+export function clearConversationHideForPeer(conversationId: number, peerId: string): void {
+  openDb()
+    .prepare('DELETE FROM hidden_conversations WHERE conversation_id = ? AND peer_id = ?')
+    .run(conversationId, peerId)
 }

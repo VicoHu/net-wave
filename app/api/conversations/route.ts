@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { requirePeerId } from '@/api-auth'
-import { createOrGetConversation, listConversations } from '@/chat'
+import { clearConversationHideForPeer, createOrGetConversation, listConversations } from '@/chat'
 import { findPeer } from '@/peers'
 
 export async function GET() {
@@ -23,5 +23,7 @@ export async function POST(request: Request) {
   if (!conversation) {
     return NextResponse.json({ error: '无法创建会话' }, { status: 400 })
   }
+  // 本人再次发起私聊即解除本人对该会话的隐藏（CONTEXT.md「隐藏」词条：再次发起时恢复显示）
+  clearConversationHideForPeer(conversation.id, peerId)
   return NextResponse.json(conversation)
 }
