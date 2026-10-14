@@ -11,7 +11,7 @@ loadEnvConfig(process.cwd(), process.env.NODE_ENV !== 'production')
 import { openDb } from './src/db'
 import { addFileMessage, addMessage, canAccessConversation, clearConversationHides, findConversation, type MessageRow } from './src/chat'
 import { findPeer, updatePeerIp, updatePeerMac } from './src/peers'
-import { roomMemberIds } from './src/rooms'
+import { broadcastRoomOnline, roomMemberIds } from './src/rooms'
 import { getHub } from './src/hub'
 import { clientIpFromRequest, clientMacFromRequest, lookupMac } from './src/net-info'
 import { ensureAdminPassword } from './src/admin'
@@ -89,11 +89,18 @@ wss.on('connection', (ws, req) => {
   }
   ws.send(JSON.stringify({ type: 'connected' }))
   hub.add(ws, peerId)
+  broadcastRoomOnline()
   // 上线即提醒客户端刷新会话（离线期间的消息由此补投递）；
   // 挪到下一 tick，避免与 presence 同一同步批次连发被客户端漏收
   setTimeout(() => hub.sendToPeer(peerId, 'conversations-updated', {}), 0)
-  ws.on('close', () => hub.remove(ws))
-  ws.on('error', () => hub.remove(ws))
+  ws.on('close', () => {
+    hub.remove(ws)
+    broadcastRoomOnline()
+  })
+  ws.on('error', () => {
+    hub.remove(ws)
+    broadcastRoomOnline()
+  })
   ws.on('message', (raw) => {
     let data: { type?: unknown; conversationId?: unknown; text?: unknown; fileId?: unknown }
     try {

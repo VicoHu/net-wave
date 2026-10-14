@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getHub } from '@/hub'
 import { requirePeerId } from '@/api-auth'
-import { createRoom, listRooms } from '@/rooms'
+import { broadcastRoomOnline, createRoom, listRooms } from '@/rooms'
 
 export async function GET() {
   const peerId = await requirePeerId()
@@ -19,8 +19,9 @@ export async function POST(request: Request) {
   if (!room) {
     return NextResponse.json({ error: '房间名需在 1-50 个字符之间' }, { status: 400 })
   }
-  // 建房即加入：自己的会话列表立即出现该房间
+  // 建房即加入：自己的会话列表立即出现该房间，在线成员数一并广播
   getHub().sendToPeer(peerId, 'conversations-updated', {})
   getHub().broadcast('rooms-updated', {})
+  broadcastRoomOnline()
   return NextResponse.json(room)
 }

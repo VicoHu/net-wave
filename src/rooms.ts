@@ -112,3 +112,19 @@ export function roomMemberIds(roomId: number): string[] {
     (r) => r.peer_id,
   )
 }
+
+/** 各房间的在线成员数：只统计当前 WS 在线的成员；无在线成员的房间不出现（key 为字符串化的房间 id） */
+export function roomOnlineCounts(onlinePeerIds: string[]): Record<string, number> {
+  if (onlinePeerIds.length === 0) return {}
+  const db = openDb()
+  const placeholders = onlinePeerIds.map(() => '?').join(',')
+  const rows = db
+    .prepare(`SELECT room_id, COUNT(*) AS n FROM room_members WHERE peer_id IN (${placeholders}) GROUP BY room_id`)
+    .all(...onlinePeerIds) as { room_id: number; n: number }[]
+  return Object.fromEntries(rows.map((r) => [String(r.room_id), r.n]))
+}
+
+/** 在线成员集合或成员身份变化（上/下线、入房、建房）后，向全员广播各房间的在线成员数 */
+export function broadcastRoomOnline(): void {
+  getHub().broadcast('room-online', { counts: roomOnlineCounts(getHub().onlinePeerIds()) })
+}

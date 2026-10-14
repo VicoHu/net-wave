@@ -280,4 +280,31 @@ describe('多人房间', () => {
     const imageMessage = body.messages.find((msg) => msg.kind === 'image')
     expect(imageMessage?.file?.name).toBe('房间截图.png')
   })
+
+  it('房间在线成员数：随建房/入房/下线实时广播（room-online 事件）', async () => {
+    const owner = await createPeer(app.baseUrl)
+    const a = await connectWs(app, owner)
+    // 先消费连接触发的初次广播（此刻尚无任何含在线成员的房间），再建房
+    await a.wait('room-online')
+    // 建房即加入：创建路由广播后，房内唯一在线成员就是房主
+    const created = a.wait('room-online')
+    const room = await createRoom(owner, '在线数房间')
+    expect(((await created) as { counts: Record<string, number> }).counts[String(room.id)]).toBe(1)
+    const roomKey = String(room.id)
+
+    // 第二名成员上线（未入房，不改变房间在线数），消费掉这次广播再继续
+    const joiner = await createPeer(app.baseUrl)
+    const b = await connectWs(app, joiner)
+    await a.wait('room-online', (d: { counts: Record<string, number> }) => d.counts[roomKey] === 1)
+
+    // 先注册等待再触发：WS 广播可能先于 HTTP 响应到达
+    const bothOnline = a.wait('room-online', (d: { counts: Record<string, number> }) => d.counts[roomKey] === 2)
+    await joinRoom(joiner, room.id)
+    await bothOnline
+
+    b.ws.close()
+    const afterLeave = await a.wait('room-online', (d: { counts: Record<string, number> }) => d.counts[roomKey] === 1)
+    expect(afterLeave.counts[roomKey]).toBe(1)
+    a.ws.close()
+  })
 })

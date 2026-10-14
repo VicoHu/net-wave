@@ -9,7 +9,14 @@ import type { ConversationSummary } from '../types'
  * 右侧会话信息面板（对应 Discord 成员/资料栏）：展示当前会话的资料卡。
  * 仅 ≥ xl 屏显示，与截图右栏对位。
  */
-export function ConversationInfo({ conversation }: { conversation: ConversationSummary }) {
+export function ConversationInfo({
+  conversation,
+  onlineCount = null,
+}: {
+  conversation: ConversationSummary
+  /** 当前房间在线成员数；null 表示在线数广播尚未到达，不展示 */
+  onlineCount?: number | null
+}) {
   const isRoom = conversation.type === 'room'
   const name = conversationName(conversation)
   const bannerColor = isRoom ? 'var(--primary)' : avatarColor(name)
@@ -35,7 +42,8 @@ export function ConversationInfo({ conversation }: { conversation: ConversationS
           </div>
           {isRoom && (
             <p className="text-sm text-muted-foreground">
-              {conversation.room?.memberCount} 名成员 · 中心内公开可加入
+              {conversation.room?.memberCount} 名成员
+              {onlineCount != null && ` · ${onlineCount} 在线`} · 中心内公开可加入
             </p>
           )}
         </div>

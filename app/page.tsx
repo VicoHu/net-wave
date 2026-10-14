@@ -110,6 +110,8 @@ function HomeInner() {
   const isMobile = useIsMobile()
   const [me, setMe] = useState<Peer | null>(null)
   const [peers, setPeers] = useState<Peer[]>([])
+  // 各房间在线成员数（room-online 事件）；null 表示尚未收到过广播，避免误显 0
+  const [roomOnline, setRoomOnline] = useState<Record<string, number> | null>(null)
   const [conversations, setConversations] = useState<ConversationSummary[]>([])
   const [rooms, setRooms] = useState<RoomInfo[]>([])
   const [unreadFlash, setUnreadFlash] = useState(false)
@@ -149,6 +151,11 @@ function HomeInner() {
     () => conversations.find((c) => c.id === activeId) ?? null,
     [conversations, activeId],
   )
+  // 当前房间在线成员数；null 表示广播未到或非房间会话，不展示
+  const activeRoomOnline =
+    roomOnline != null && activeConversation?.type === 'room' && activeConversation.room
+      ? (roomOnline[String(activeConversation.room.id)] ?? 0)
+      : null
 
   const loadConversations = useCallback(async () => {
     const res = await fetch('/api/conversations')
@@ -245,6 +252,8 @@ function HomeInner() {
       const data = JSON.parse(event.data as string)
       if (data.type === 'presence') {
         setPeers(data.peers as Peer[])
+      } else if (data.type === 'room-online') {
+        setRoomOnline(data.counts as Record<string, number>)
       } else if (data.type === 'message') {
         const message = data.message as MessageRow
         if (message.conversationId === activeIdRef.current) {
@@ -500,6 +509,7 @@ function HomeInner() {
                   <h1 className="truncate font-semibold">{conversationName(activeConversation)}</h1>
                   <span className="hidden shrink-0 text-sm text-muted-foreground sm:inline">
                     {activeConversation.room?.memberCount} 名成员
+                    {activeRoomOnline != null && ` · ${activeRoomOnline} 在线`}
                   </span>
                 </>
               ) : (
@@ -572,7 +582,7 @@ function HomeInner() {
         )}
       </main>
 
-      {activeConversation && <ConversationInfo conversation={activeConversation} />}
+      {activeConversation && <ConversationInfo conversation={activeConversation} onlineCount={activeRoomOnline} />}
 
       <CreateRoomDialog
         visible={roomModalVisible}

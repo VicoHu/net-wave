@@ -16,6 +16,8 @@ export interface Hub {
   broadcast(type: string, payload: Record<string, unknown>): void
   sendToPeer(peerId: string, type: string, payload: Record<string, unknown>): void
   notifyPresenceChanged(): void
+  /** 当前 WS 在线的节点 id（同节点多标签页去重） */
+  onlinePeerIds(): string[]
 }
 
 function createHub(): Hub {
@@ -54,6 +56,9 @@ function createHub(): Hub {
     },
     notifyPresenceChanged() {
       hub.broadcast('presence', { peers: peersWithConnections() })
+    },
+    onlinePeerIds() {
+      return [...new Set(connections.values())]
     },
   }
   return hub

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getHub } from '@/hub'
 import { requirePeerId } from '@/api-auth'
-import { joinRoom } from '@/rooms'
+import { broadcastRoomOnline, joinRoom } from '@/rooms'
 
 export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const peerId = await requirePeerId()
@@ -15,8 +15,9 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
   if (!room) {
     return NextResponse.json({ error: '房间不存在' }, { status: 404 })
   }
-  // 加入者本地会话列表更新；全员刷新公开房间列表的人数
+  // 加入者本地会话列表更新；全员刷新公开房间列表的人数与各房间在线成员数
   getHub().sendToPeer(peerId, 'conversations-updated', {})
   getHub().broadcast('rooms-updated', {})
+  broadcastRoomOnline()
   return NextResponse.json(room)
 }
