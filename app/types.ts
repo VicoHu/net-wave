@@ -7,6 +7,9 @@ export interface Peer {
   name: string
   ip?: string | null
   mac?: string | null
+  /** 节点隐私偏好（服务端持久）：隐藏后本人网络信息不随消息/presence 下发 */
+  hideIp?: boolean
+  hideMac?: boolean
 }
 
 export interface RoomInfo {

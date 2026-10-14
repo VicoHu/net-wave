@@ -89,6 +89,12 @@ export function openDb(dataDir = process.env.DATA_DIR ?? './data'): Database.Dat
       db.exec(`ALTER TABLE peers ADD COLUMN ${column} TEXT`)
     }
   }
+  // 增量迁移：既有库的 peers 增加隐私开关（隐藏后本人网络信息不再随消息/presence 下发）
+  for (const column of ['hide_ip', 'hide_mac']) {
+    if (!peerColumns.some((c) => c.name === column)) {
+      db.exec(`ALTER TABLE peers ADD COLUMN ${column} INTEGER NOT NULL DEFAULT 0`)
+    }
+  }
   // 增量迁移：既有库的 files 增加访问统计列（统一口径，见 ADR-0005）
   const fileColumns = db.prepare('PRAGMA table_info(files)').all() as { name: string }[]
   if (!fileColumns.some((c) => c.name === 'access_count')) {

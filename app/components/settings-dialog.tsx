@@ -1,8 +1,9 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { ChevronRightIcon, ShieldIcon } from 'lucide-react'
+import { toast } from 'sonner'
 import { Button } from '@components/ui/button'
 import {
   Dialog,
@@ -20,7 +21,11 @@ import { currentNotificationPermission, type NotificationPermissionState } from 
 // 若更换格式（png/webp 等）需同步修改下方 import 的扩展名
 import blurPreview from './blur-preview.jpg'
 
-/** 消息区显示偏好：仅影响本机视图（显示项默认开启，通知项默认关闭） */
+/**
+ * 消息区显示偏好：安全模式/模糊强度/通知仅影响本机视图（localStorage）；
+ * IP/MAC 显示为节点级偏好（服务中心持久，唯一数据源）——关闭后本人的
+ * 网络信息不再随消息与 presence 下发给任何节点，本机也不再显示任何节点的 IP/MAC。
+ */
 export interface DisplaySettings {
   showIp: boolean
   showMac: boolean
@@ -34,8 +39,6 @@ export interface DisplaySettings {
   systemNotification: boolean
 }
 
-const IP_KEY = 'nw_show_ip'
-const MAC_KEY = 'nw_show_mac'
 const SAFE_MODE_KEY = 'nw_safe_mode'
 const BLUR_STRENGTH_KEY = 'nw_blur_strength'
 const PAGE_NOTIFICATION_KEY = 'nw_page_notification'
@@ -61,24 +64,45 @@ export function useDisplaySettings(): [DisplaySettings, (patch: Partial<DisplayS
     pageNotification: true,
     systemNotification: false,
   })
+  // 用户先于 /api/me 响应改动开关时，不再用服务端旧值覆盖（响应到达即失效）
+  const privacyTouchedRef = useRef(false)
 
   useEffect(() => {
-    setSettings({
-      showIp: localStorage.getItem(IP_KEY) !== '0',
-      showMac: localStorage.getItem(MAC_KEY) !== '0',
+    setSettings((prev) => ({
+      ...prev,
       safeMode: localStorage.getItem(SAFE_MODE_KEY) !== '0',
       blurStrength: readBlurStrength(),
       // 页内通知默认开（显式存过 '0' 才关，与显示项的 !== '0' 同构）；系统通知默认关（权限须用户主动授予）
       pageNotification: localStorage.getItem(PAGE_NOTIFICATION_KEY) !== '0',
       systemNotification: localStorage.getItem(SYSTEM_NOTIFICATION_KEY) === '1',
-    })
+    }))
+    // IP/MAC 显示为节点级偏好：从服务中心拉取初始值（服务端持久，为唯一数据源）
+    void (async () => {
+      const res = await fetch('/api/me')
+      if (!res.ok) return
+      const peer = (await res.json()) as { hideIp?: boolean; hideMac?: boolean }
+      if (privacyTouchedRef.current) return
+      setSettings((prev) => ({ ...prev, showIp: !peer.hideIp, showMac: !peer.hideMac }))
+    })()
   }, [])
 
   const update = (patch: Partial<DisplaySettings>) => {
+    if (patch.showIp != null || patch.showMac != null) {
+      privacyTouchedRef.current = true
+      void fetch('/api/me', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...(patch.showIp != null ? { hideIp: !patch.showIp } : {}),
+          ...(patch.showMac != null ? { hideMac: !patch.showMac } : {}),
+        }),
+      }).catch(() => {
+        // 同步失败：本机视图已生效但服务中心未存，明确告知避免误以为已对他人隐藏
+        toast.error('已在本机生效，但同步到服务中心失败，请稍后重试')
+      })
+    }
     setSettings((prev) => {
       const next = { ...prev, ...patch }
-      if (patch.showIp != null) localStorage.setItem(IP_KEY, patch.showIp ? '1' : '0')
-      if (patch.showMac != null) localStorage.setItem(MAC_KEY, patch.showMac ? '1' : '0')
       if (patch.safeMode != null) localStorage.setItem(SAFE_MODE_KEY, patch.safeMode ? '1' : '0')
       if (patch.blurStrength != null) localStorage.setItem(BLUR_STRENGTH_KEY, String(patch.blurStrength))
       if (patch.pageNotification != null) localStorage.setItem(PAGE_NOTIFICATION_KEY, patch.pageNotification ? '1' : '0')
@@ -248,13 +272,13 @@ export function SettingsDialog({ visible, onOpenChange, settings, onChange }: Se
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
           <DialogTitle>设置</DialogTitle>
-          <DialogDescription>偏好仅作用于本机视图。</DialogDescription>
+          <DialogDescription>安全模式与通知仅作用于本机；IP/MAC 显示跟随节点身份。</DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-4 py-2">
           <div className="flex items-center justify-between gap-4">
             <div>
               <p className="text-sm font-medium">显示 IP 地址</p>
-              <p className="text-xs text-muted-foreground">在消息中昵称旁小字展示。关闭后，任何节点的 IP 都不再对你显示。</p>
+              <p className="text-xs text-muted-foreground">在消息中昵称旁小字展示。关闭后：其他节点不再看到你的 IP，你也不再看到任何节点的 IP。</p>
             </div>
             <Switch
               checked={settings.showIp}
@@ -265,7 +289,7 @@ export function SettingsDialog({ visible, onOpenChange, settings, onChange }: Se
           <div className="flex items-center justify-between gap-4">
             <div>
               <p className="text-sm font-medium">显示 MAC 地址</p>
-              <p className="text-xs text-muted-foreground">点击消息头像时在资料卡中展示。关闭后，任何节点的 MAC 都不再对你显示。</p>
+              <p className="text-xs text-muted-foreground">点击消息头像时在资料卡中展示。关闭后：其他节点不再看到你的 MAC，你也不再看到任何节点的 MAC。</p>
             </div>
             <Switch
               checked={settings.showMac}

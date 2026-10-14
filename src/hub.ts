@@ -1,7 +1,7 @@
 import type { WebSocket } from 'ws'
-import { getPeers, type Peer } from './peers'
+import { getPeers, publicPeer, type PublicPeer } from './peers'
 
-interface OnlinePeer extends Peer {
+interface OnlinePeer extends PublicPeer {
   connections: number
 }
 
@@ -22,13 +22,13 @@ function createHub(): Hub {
   // 每个连接记录其节点身份；同节点多标签页为多条连接
   const connections = new Map<WebSocket, string>()
 
-  /** 在线节点及其连接数（重连/多标签页时 connections > 1） */
+  /** 在线节点及其连接数（重连/多标签页时 connections > 1）；网络信息按各节点隐私偏好抹除后下发 */
   function peersWithConnections(): OnlinePeer[] {
     const counts = new Map<string, number>()
     for (const peerId of connections.values()) {
       counts.set(peerId, (counts.get(peerId) ?? 0) + 1)
     }
-    return getPeers([...counts.keys()]).map((p) => ({ ...p, connections: counts.get(p.id) ?? 0 }))
+    return getPeers([...counts.keys()]).map((p) => ({ ...publicPeer(p), connections: counts.get(p.id) ?? 0 }))
   }
 
   const hub: Hub = {

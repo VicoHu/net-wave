@@ -1,6 +1,6 @@
 import { openDb } from './db'
 import { fileKind, findFile, type FileMeta } from './files'
-import { findPeer, type Peer } from './peers'
+import { findPeer, publicPeer, type PublicPeer } from './peers'
 import { isRoomMember } from './rooms'
 
 /** 节点已注销/不存在时的统一占位昵称 */
@@ -29,10 +29,10 @@ export interface MessageRow {
   createdAt: number
 }
 
-/** 私聊会话摘要（type=direct） */
+/** 私聊会话摘要（type=direct）；peer 为出网视角（不含隐私偏好，IP/MAC 已按其偏好抹除） */
 export interface DirectSummary extends Conversation {
   type: 'direct'
-  peer: Peer
+  peer: PublicPeer
   lastMessage: MessageRow | null
 }
 
@@ -106,7 +106,8 @@ const MESSAGE_SELECT = `
          f.id AS f_id, f.name AS f_name, f.size AS f_size, f.mime AS f_mime, f.uploaded_by AS f_uploaded_by,
          f.created_at AS f_created_at, f.deleted_at AS f_deleted_at,
          f.access_count AS f_access_count, f.last_access_at AS f_last_access_at,
-         p.name AS sender_name, p.ip AS sender_ip, p.mac AS sender_mac
+         p.name AS sender_name, p.ip AS sender_ip, p.mac AS sender_mac,
+         p.hide_ip AS sender_hide_ip, p.hide_mac AS sender_hide_mac
   FROM messages m
   LEFT JOIN files f ON m.file_id = f.id
   LEFT JOIN peers p ON m.sender_id = p.id
@@ -133,8 +134,9 @@ function rowToMessage(row: Record<string, unknown>): MessageRow {
     conversationId: row.conversation_id as number,
     senderId: row.sender_id as string,
     senderName: (row.sender_name as string | null) ?? DEPARTED_PEER_NAME,
-    senderIp: (row.sender_ip as string | null) ?? null,
-    senderMac: (row.sender_mac as string | null) ?? null,
+    // 发送者关闭了 IP/MAC 显示：对任何接收方（含本人）一律不下发
+    senderIp: row.sender_hide_ip === 1 ? null : (row.sender_ip as string | null) ?? null,
+    senderMac: row.sender_hide_mac === 1 ? null : (row.sender_mac as string | null) ?? null,
     kind: row.kind as MessageRow['kind'],
     text: (row.text as string | null) ?? null,
     fileId: (row.file_id as string | null) ?? null,
@@ -163,10 +165,11 @@ export function listConversations(peerId: string): ConversationSummary[] {
   const directs: DirectSummary[] = directRows.map((row) => {
     const conv = rowToConversation(row)
     const otherId = otherPeerOf(conv, peerId) ?? ''
+    const other = findPeer(otherId)
     return {
       ...conv,
       type: 'direct',
-      peer: findPeer(otherId) ?? { id: otherId, name: DEPARTED_PEER_NAME, ip: null, mac: null },
+      peer: other ? publicPeer(other) : { id: otherId, name: DEPARTED_PEER_NAME, ip: null, mac: null },
       lastMessage: lastOf(conv.id),
     }
   })
@@ -224,11 +227,12 @@ export function addMessage(conversationId: number, senderId: string, text: strin
   }
 }
 
-/** 实时投递消息时发送者的展示信息（历史读取走 SQL JOIN，这里单查一次） */
+/** 实时投递消息时发送者的展示信息（历史读取走 SQL JOIN，这里单查一次）；隐私偏好生效时抹去 IP/MAC */
 function senderNetworkOf(senderId: string): { senderName: string; senderIp: string | null; senderMac: string | null } {
   const peer = findPeer(senderId)
-  return peer
-    ? { senderName: peer.name, senderIp: peer.ip, senderMac: peer.mac }
+  const visible = peer ? publicPeer(peer) : null
+  return visible
+    ? { senderName: visible.name, senderIp: visible.ip, senderMac: visible.mac }
     : { senderName: DEPARTED_PEER_NAME, senderIp: null, senderMac: null }
 }
 
