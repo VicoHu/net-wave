@@ -459,6 +459,7 @@ function HomeInner() {
           conversations={conversations}
           rooms={rooms}
           peers={peers}
+          roomOnline={roomOnline}
           activeId={activeId}
           filter={filter}
           onFilterChange={setFilter}

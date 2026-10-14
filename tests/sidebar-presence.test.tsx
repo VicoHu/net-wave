@@ -10,7 +10,11 @@ import type { ConversationSummary, Peer } from '../app/types'
 
 const noop = () => {}
 
-function renderSidebar(conversations: ConversationSummary[], peers: Peer[]) {
+function renderSidebar(
+  conversations: ConversationSummary[],
+  peers: Peer[],
+  roomOnline: Record<string, number> | null = null,
+) {
   return renderToStaticMarkup(
     createElement(
       TooltipProvider,
@@ -20,6 +24,7 @@ function renderSidebar(conversations: ConversationSummary[], peers: Peer[]) {
       conversations,
       rooms: [],
       peers,
+      roomOnline,
       activeId: null,
       filter: '',
       onFilterChange: noop,
@@ -43,6 +48,18 @@ const directWith = (peer: Peer): ConversationSummary => ({
   peer: { id: peer.id, name: peer.name },
   lastMessage: null,
 })
+
+const roomWith = (id: number, memberCount: number): ConversationSummary => ({
+  id,
+  type: 'room',
+  room: { id, name: `房间${id}`, memberCount, createdBy: null },
+  lastMessage: null,
+})
+
+/** 截取「房间」区段的 HTML：以区段头部的 span 标记定位（搜索框 aria-label 里也有「房间」二字，不能按裸文本切） */
+function roomSection(html: string) {
+  return html.split('>房间</span>')[1]?.split('在线节点')[0] ?? ''
+}
 
 /** 截取「私信」区段的 HTML，避免断言被在线节点区/底部自身头像干扰 */
 function dmSection(html: string) {
@@ -75,5 +92,16 @@ describe('侧栏在线状态', () => {
     // 不能用 dmSection：aria-label 中的「私信」会被 split 切断，改在完整 HTML 上断言
     // （该 aria-label 全页唯一，房间行为「删除房间 …」，无歧义）
     expect(html).toContain('aria-label="关闭私信 阿汤"')
+  })
+
+  it('房间行显示在线成员数（总数 · 在线）', () => {
+    const html = renderSidebar([roomWith(7, 12)], [], { '7': 3 })
+    expect(roomSection(html)).toContain('12 人 · 3 在线')
+  })
+
+  it('在线数广播未到达时房间行只显示总人数', () => {
+    const html = renderSidebar([roomWith(7, 12)], [], null)
+    expect(roomSection(html)).toContain('12 人')
+    expect(roomSection(html)).not.toContain('在线')
   })
 })

@@ -18,6 +18,8 @@ interface AppSidebarProps {
   conversations: ConversationSummary[]
   rooms: RoomInfo[]
   peers: Peer[]
+  /** 各房间在线成员数（room-online 事件）；null 表示广播未到达，不展示 */
+  roomOnline?: Record<string, number> | null
   activeId: number | null
   filter: string
   onFilterChange: (value: string) => void
@@ -63,6 +65,7 @@ export function AppSidebar({
   conversations,
   rooms,
   peers,
+  roomOnline = null,
   activeId,
   filter,
   onFilterChange,
@@ -194,6 +197,9 @@ export function AppSidebar({
                     <span className="min-w-0 flex-1 truncate text-sm font-medium">{name}</span>
                     <span className="shrink-0 text-xs text-muted-foreground">
                       {conv.room?.memberCount} 人
+                      {roomOnline != null &&
+                        conv.room &&
+                        ` · ${roomOnline[String(conv.room.id)] ?? 0} 在线`}
                     </span>
                   </button>
                   {owned && (
