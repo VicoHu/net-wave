@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { DownloadIcon, FileIcon, Loader2Icon, Maximize2Icon, PlayIcon } from 'lucide-react'
+import { DownloadIcon, EyeIcon, EyeOffIcon, FileIcon, Loader2Icon, Maximize2Icon, PlayIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   MessageScroller,
@@ -134,7 +134,8 @@ function FileCard({ file }: { file: NonNullable<MessageRow['file']> }) {
 /**
  * 视频消息：与图片同尺寸的大封面（preload=metadata 取首帧）+ 居中播放按钮，
  * 点击后完整下载（实时进度）并就地播放（原生控件含进度条与音量），右上角
- * 可展开到灯箱大图层——弱网下完整下载后播放，不会边下边卡。
+ * 可展开到灯箱大图层，左上角眼睛按钮可恢复/取消安全模式模糊——弱网下
+ * 完整下载后播放，不会边下边卡。
  */
 function VideoCard({
   file,
@@ -150,6 +151,8 @@ function VideoCard({
   const [progress, setProgress] = useState<number | null>(null)
   // 就地播放的 objectURL：组件卸载时回收；Blob 保留供展开灯箱复用（不二次下载）
   const [src, setSrc] = useState<string | null>(null)
+  // 眼睛按钮的再模糊态：播放即主动查看默认清晰，可一键恢复模糊
+  const [hidden, setHidden] = useState(false)
   const blobRef = useRef<Blob | null>(null)
   const srcRef = useRef<string | null>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
@@ -197,9 +200,27 @@ function VideoCard({
 
   if (src) {
     return (
-      <div className="relative w-fit">
-        {/* 点击播放即主动查看：解除安全模式模糊 */}
-        <video ref={videoRef} src={src} controls autoPlay playsInline className="max-h-80 w-auto max-w-full rounded-lg" />
+      <div className={cn('relative w-fit', hidden && 'overflow-hidden rounded-lg')}>
+        {/* 点击播放即主动查看：解除安全模式模糊；模糊时 scale+裁切防晕影，与封面同法 */}
+        <video
+          ref={videoRef}
+          src={src}
+          controls
+          autoPlay
+          playsInline
+          className={cn('max-h-80 w-auto max-w-full rounded-lg', hidden && 'scale-110')}
+          style={hidden ? { filter: `blur(${blurStrength}px)` } : undefined}
+        />
+        <Button
+          type="button"
+          variant="secondary"
+          size="icon-sm"
+          aria-label={hidden ? '取消模糊' : '恢复模糊'}
+          className="absolute top-2 left-2 rounded-full bg-black/60 text-white hover:bg-black/80"
+          onClick={() => setHidden((v) => !v)}
+        >
+          {hidden ? <EyeIcon /> : <EyeOffIcon />}
+        </Button>
         <Button
           type="button"
           variant="secondary"
