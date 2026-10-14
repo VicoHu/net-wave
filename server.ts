@@ -89,17 +89,19 @@ wss.on('connection', (ws, req) => {
   }
   ws.send(JSON.stringify({ type: 'connected' }))
   hub.add(ws, peerId)
-  broadcastRoomOnline()
   // 上线即提醒客户端刷新会话（离线期间的消息由此补投递）；
-  // 挪到下一 tick，避免与 presence 同一同步批次连发被客户端漏收
-  setTimeout(() => hub.sendToPeer(peerId, 'conversations-updated', {}), 0)
+  // 挪到下一 tick，避免与 presence 同一同步批次连发被客户端漏收（room-online 同理）
+  setTimeout(() => {
+    hub.sendToPeer(peerId, 'conversations-updated', {})
+    broadcastRoomOnline()
+  }, 0)
   ws.on('close', () => {
     hub.remove(ws)
-    broadcastRoomOnline()
+    setTimeout(broadcastRoomOnline, 0)
   })
   ws.on('error', () => {
     hub.remove(ws)
-    broadcastRoomOnline()
+    setTimeout(broadcastRoomOnline, 0)
   })
   ws.on('message', (raw) => {
     let data: { type?: unknown; conversationId?: unknown; text?: unknown; fileId?: unknown }
