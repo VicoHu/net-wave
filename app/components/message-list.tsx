@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { DownloadIcon, FileIcon, Loader2Icon, PlayIcon } from 'lucide-react'
+import { DownloadIcon, FileIcon, Loader2Icon, Maximize2Icon, PlayIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   MessageScroller,
@@ -133,7 +133,8 @@ function FileCard({ file }: { file: NonNullable<MessageRow['file']> }) {
 
 /**
  * 视频消息：与图片同尺寸的大封面（preload=metadata 取首帧）+ 居中播放按钮，
- * 点击封面后完整下载（实时进度），完成即用本地 Blob 播放——弱网下不会出现边下边卡。
+ * 点击后完整下载（实时进度）并就地播放（原生控件含进度条与音量），右上角
+ * 可展开到灯箱大图层——弱网下完整下载后播放，不会边下边卡。
  */
 function VideoCard({
   file,
@@ -147,14 +148,33 @@ function VideoCard({
   onPlay: (blob: Blob, name: string) => void
 }) {
   const [progress, setProgress] = useState<number | null>(null)
+  // 就地播放的 objectURL：组件卸载时回收；Blob 保留供展开灯箱复用（不二次下载）
+  const [src, setSrc] = useState<string | null>(null)
+  const blobRef = useRef<Blob | null>(null)
+  const srcRef = useRef<string | null>(null)
+  const videoRef = useRef<HTMLVideoElement | null>(null)
+
+  useEffect(() => () => {
+    if (srcRef.current) URL.revokeObjectURL(srcRef.current)
+  }, [])
 
   const play = () => {
-    if (progress != null) return
+    if (progress != null || src) return
     setProgress(0)
     fetchBlob(`/api/files/${file.id}`, setProgress)
-      .then((blob) => onPlay(blob, file.name))
+      .then((blob) => {
+        blobRef.current = blob
+        srcRef.current = URL.createObjectURL(blob)
+        setSrc(srcRef.current)
+      })
       .catch((e: Error) => toast.error(e.message))
       .finally(() => setProgress(null))
+  }
+
+  // 展开到灯箱前暂停原位播放：同一视频双路并行会双声道/双倍带宽
+  const expand = () => {
+    videoRef.current?.pause()
+    if (blobRef.current) onPlay(blobRef.current, file.name)
   }
 
   // 已删除无封面可取：保留文件卡片样式仅作展示
@@ -171,6 +191,25 @@ function VideoCard({
         <span className="shrink-0 rounded-full bg-destructive/15 px-2.5 py-0.5 text-xs font-medium text-destructive">
           已删除
         </span>
+      </div>
+    )
+  }
+
+  if (src) {
+    return (
+      <div className="relative w-fit">
+        {/* 点击播放即主动查看：解除安全模式模糊 */}
+        <video ref={videoRef} src={src} controls autoPlay playsInline className="max-h-80 w-auto max-w-full rounded-lg" />
+        <Button
+          type="button"
+          variant="secondary"
+          size="icon-sm"
+          aria-label="展开到大图层播放"
+          className="absolute top-2 right-2 rounded-full bg-black/60 text-white hover:bg-black/80"
+          onClick={expand}
+        >
+          <Maximize2Icon />
+        </Button>
       </div>
     )
   }
@@ -390,6 +429,121 @@ interface MediaPreview {
   blob?: Blob
 }
 
+/** 灯箱缩放上限与双击档位 */
+const ZOOM_MAX = 8
+const ZOOM_DOUBLE_TAP = 2.5
+
+interface ZoomTransform {
+  scale: number
+  x: number
+  y: number
+}
+
+/** 以容器内 (px,py) 为锚缩放：保持锚点下的内容不动；缩回 1x 时位移归零 */
+function zoomAt(t: ZoomTransform, px: number, py: number, factor: number): ZoomTransform {
+  const scale = Math.min(ZOOM_MAX, Math.max(1, t.scale * factor))
+  if (scale === 1) return { scale: 1, x: 0, y: 0 }
+  const k = scale / t.scale
+  return { scale, x: px - k * (px - t.x), y: py - k * (py - t.y) }
+}
+
+/**
+ * 灯箱缩放容器：滚轮/双指以指针为锚缩放，放大后拖拽平移，双击在 1x 与放大档间切换。
+ * 外层固定不变换（锚点坐标基于其稳定 rect），内层整体 transform；
+ * 拖拽超过阈值后吞掉紧随的 click，避免放大平移误触视频控件。
+ */
+function Zoomable({ children, className }: { children: React.ReactNode; className?: string }) {
+  const [zoom, setZoom] = useState<ZoomTransform>({ scale: 1, x: 0, y: 0 })
+  const outerRef = useRef<HTMLDivElement | null>(null)
+  const pointersRef = useRef(new Map<number, { x: number; y: number }>())
+  const dragRef = useRef<{ px: number; py: number; baseX: number; baseY: number } | null>(null)
+  const pinchRef = useRef<{ dist: number; base: ZoomTransform } | null>(null)
+  const movedRef = useRef(false)
+
+  // wheel 须 preventDefault（否则连滚带缩触发外层滚动/历史导航），React 合成事件是 passive，挂原生监听
+  useEffect(() => {
+    const el = outerRef.current
+    if (!el) return
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault()
+      const rect = el.getBoundingClientRect()
+      setZoom((t) => zoomAt(t, e.clientX - rect.left, e.clientY - rect.top, e.deltaY < 0 ? 1.2 : 1 / 1.2))
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [])
+
+  const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
+    if (pointersRef.current.size === 1 && zoom.scale > 1) {
+      dragRef.current = { px: e.clientX, py: e.clientY, baseX: zoom.x, baseY: zoom.y }
+      e.currentTarget.setPointerCapture(e.pointerId)
+    } else if (pointersRef.current.size === 2) {
+      const [p1, p2] = [...pointersRef.current.values()]
+      pinchRef.current = { dist: Math.hypot(p1.x - p2.x, p1.y - p2.y) || 1, base: zoom }
+      dragRef.current = null
+    }
+  }
+
+  const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!pointersRef.current.has(e.pointerId)) return
+    pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
+    const rect = outerRef.current?.getBoundingClientRect()
+    if (pinchRef.current && pointersRef.current.size >= 2 && rect) {
+      const [p1, p2] = [...pointersRef.current.values()]
+      const factor = Math.hypot(p1.x - p2.x, p1.y - p2.y) / pinchRef.current.dist
+      setZoom(zoomAt(pinchRef.current.base, (p1.x + p2.x) / 2 - rect.left, (p1.y + p2.y) / 2 - rect.top, factor))
+    } else if (dragRef.current) {
+      const d = dragRef.current
+      if (!movedRef.current && (Math.abs(e.clientX - d.px) > 3 || Math.abs(e.clientY - d.py) > 3)) {
+        movedRef.current = true
+      }
+      setZoom((t) => ({ ...t, x: d.baseX + e.clientX - d.px, y: d.baseY + e.clientY - d.py }))
+    }
+  }
+
+  const onPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    pointersRef.current.delete(e.pointerId)
+    if (pointersRef.current.size < 2) pinchRef.current = null
+    dragRef.current = null
+  }
+
+  const onDoubleClick = (e: React.MouseEvent) => {
+    const rect = outerRef.current?.getBoundingClientRect()
+    if (!rect) return
+    setZoom((t) => zoomAt(t, e.clientX - rect.left, e.clientY - rect.top, t.scale === 1 ? ZOOM_DOUBLE_TAP : 1 / t.scale))
+  }
+
+  return (
+    <div
+      ref={outerRef}
+      className={cn(
+        'relative w-full touch-none select-none',
+        zoom.scale > 1 ? 'cursor-grab' : 'cursor-zoom-in',
+        className,
+      )}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerUp}
+      onDoubleClick={onDoubleClick}
+      onClickCapture={(e) => {
+        if (movedRef.current) {
+          e.preventDefault()
+          e.stopPropagation()
+          movedRef.current = false
+        }
+      }}
+    >
+      <div
+        style={{ transform: `translate(${zoom.x}px, ${zoom.y}px) scale(${zoom.scale})`, transformOrigin: '0 0' }}
+      >
+        {children}
+      </div>
+    </div>
+  )
+}
+
 interface MessageListProps {
   messages: MessageRow[]
   loading?: boolean
@@ -605,16 +759,34 @@ export function MessageList({
         </MessageScroller>
       </MessageScrollerProvider>
 
-      {/* 媒体预览：覆盖在消息流之上的灯箱，图片/视频均可下载 */}
+      {/* 媒体预览：覆盖在消息流之上的灯箱，图片/视频均可缩放与下载 */}
       <Dialog open={preview !== null} onOpenChange={(open) => !open && closePreview()}>
         <DialogContent className="max-w-3xl border-none bg-transparent p-0 [&>button]:-top-2 [&>button]:right-0 [&>button]:rounded-full [&>button]:bg-black/60">
           <DialogTitle className="sr-only">{preview?.type === 'video' ? '视频播放' : '图片预览'}</DialogTitle>
           {preview?.type === 'image' && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={preview.url} alt="图片预览" className="max-h-[80vh] w-full rounded-lg object-contain" />
+            <Zoomable>
+              {/* touchAction none：双指交给 Zoomable 捏合，而非浏览器页面缩放 */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={preview.url}
+                alt="图片预览"
+                style={{ touchAction: 'none' }}
+                draggable={false}
+                className="max-h-[80vh] w-full rounded-lg object-contain"
+              />
+            </Zoomable>
           )}
           {preview?.type === 'video' && (
-            <video src={preview.url} controls autoPlay playsInline className="max-h-[80vh] w-full rounded-lg" />
+            <Zoomable>
+              <video
+                src={preview.url}
+                controls
+                autoPlay
+                playsInline
+                style={{ touchAction: 'none' }}
+                className="max-h-[80vh] w-full rounded-lg"
+              />
+            </Zoomable>
           )}
           {preview && <MediaSaveButton preview={preview} />}
         </DialogContent>
