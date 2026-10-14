@@ -473,7 +473,7 @@ function zoomAt(t: ZoomTransform, px: number, py: number, factor: number): ZoomT
  * 外层固定不变换（锚点坐标基于其稳定 rect），内层整体 transform；
  * 拖拽超过阈值后吞掉紧随的 click，避免放大平移误触视频控件。
  */
-function Zoomable({ children, className }: { children: React.ReactNode; className?: string }) {
+function Zoomable({ children }: { children: React.ReactNode }) {
   const [zoom, setZoom] = useState<ZoomTransform>({ scale: 1, x: 0, y: 0 })
   const outerRef = useRef<HTMLDivElement | null>(null)
   const pointersRef = useRef(new Map<number, { x: number; y: number }>())
@@ -541,7 +541,6 @@ function Zoomable({ children, className }: { children: React.ReactNode; classNam
       className={cn(
         'relative w-full touch-none select-none',
         zoom.scale > 1 ? 'cursor-grab' : 'cursor-zoom-in',
-        className,
       )}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
